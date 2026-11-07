@@ -75,8 +75,10 @@ function fmtDay(ts) {
 // Verkleinert eine einzeilige Überschrift, bis sie in ihre Box passt.
 function fitText(el, maxPx, minPx) {
   el.style.fontSize = maxPx + "px";
-  const avail = el.parentElement.clientWidth;
-  if (!avail) return;
+  const parent = el.parentElement;
+  const cs = getComputedStyle(parent);
+  const avail = parent.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 4;
+  if (avail <= 0) return;
   let size = maxPx;
   for (let i = 0; i < 12 && el.scrollWidth > avail && size > minPx; i++) {
     size = Math.max(minPx, Math.floor(size * Math.min(0.97, avail / el.scrollWidth)));
