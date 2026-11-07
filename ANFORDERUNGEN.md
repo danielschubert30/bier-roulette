@@ -16,7 +16,7 @@ Legende: `[x]` umgesetzt · `[ ]` offen
 
 ## B – Inhalte
 
-- [x] **B1 Während das Rad dreht:** FCA-Fakten oder Sprüche einblenden.
+- [x] **B1 Während das Rad dreht:** FCA-Fakten (45 geprüfte, mit Quelle in `js/content.js`) oder Sprüche einblenden.
 - [x] **B2 Ergebnis:** „Bierholer: Name“, dazu „zum X. Mal“ plus passende Statistik oder Spruch.
 - [x] **B3 Standard-Kader:** Betzmeister, Cousin, Demharter M., Emilio, Schaufi, Schubi.
 - [x] **B4 FCA-Wappen** in der Mitte des Rads.

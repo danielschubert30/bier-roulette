@@ -4,7 +4,7 @@ import { createWheel } from "./wheel.js";
 import * as SO from "./shootout.js";
 import { SPIN_QUIPS, RESULT_QUIPS, FINAL_INTROS, CHAMPION_QUIPS, SHOT_TEXT, FCA_FACTS } from "./content.js";
 
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.0.1";
 const NS = "http://www.w3.org/2000/svg";
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const $ = (id) => document.getElementById(id);

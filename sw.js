@@ -1,6 +1,6 @@
 // Service Worker: macht die App offline-fähig (schlechtes Netz im Stadion).
 // Bei jeder Veröffentlichung VERSION hochzählen, damit Handys die neue Fassung laden.
-const VERSION = "v1.0.0";
+const VERSION = "v1.0.1";
 const CACHE = "bier-roulette-" + VERSION;
 const SHELL = [
   "./",
