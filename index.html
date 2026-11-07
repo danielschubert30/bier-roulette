@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FCA Bier-Roulette</title>
+<meta name="description" content="Wer holt das nächste Bier? Das Glücksrad für die FCA-Runde im Stadion.">
+<meta name="theme-color" content="#07110b">
+<meta name="color-scheme" content="dark">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bier-Roulette">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&family=Big+Shoulders+Display:wght@800;900&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-crown" viewBox="0 0 24 24"><path d="M3.5 17.5 2 7.5l5.2 4L12 4l4.8 7.5 5.2-4-1.5 10z" fill="currentColor"/><rect x="3.5" y="18.8" width="17" height="2.2" rx="1" fill="currentColor"/></symbol>
+  <symbol id="i-wheel" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="2.6" fill="currentColor"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V11M10 20V5M16 20v-7M22 20H2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-team" viewBox="0 0 24 24"><circle cx="8.5" cy="8" r="3.4" fill="currentColor"/><path d="M2 20c0-3.6 2.9-6.2 6.5-6.2S15 16.4 15 20z" fill="currentColor"/><circle cx="17" cy="9" r="2.8" fill="currentColor" opacity=".7"/><path d="M15.6 14.2c3.5-.6 6.4 1.8 6.4 5.8h-5.3" fill="currentColor" opacity=".7"/></symbol>
+</svg>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" aria-hidden="true"><use href="#i-wheel"/></svg>
+      <span>FCA Bier-Roulette</span>
+    </div>
+    <button type="button" class="champ-pill" id="champPill" hidden>
+      <svg aria-hidden="true"><use href="#i-crown"/></svg>
+      <span class="champ-pill-label">Champion</span>
+      <strong id="champPillName"></strong>
+    </button>
+  </header>
+
+  <main class="views">
+    <!-- Spiel -->
+    <section class="view view-game" id="view-game" aria-label="Spiel">
+      <div class="round-head">
+        <div class="round-line">
+          <p class="round-title"><span id="roundNo">Runde 1</span><span class="round-state" id="roundState"></span></p>
+          <button type="button" class="link-btn" id="undoBtn" hidden>Rückgängig</button>
+        </div>
+        <ul class="pot" id="pot" aria-label="Wer noch im Topf ist"></ul>
+      </div>
+
+      <div class="arena" id="arena">
+        <div class="stage stage-wheel" id="stageWheel">
+          <div class="wheel-box"><svg id="wheel" class="wheel" role="img" aria-label="Glücksrad"></svg></div>
+        </div>
+
+        <div class="stage stage-final" id="stageFinal" hidden>
+          <p class="kicker">Finale · Elfmeterschießen</p>
+          <div class="score" id="score"></div>
+          <div class="goal-box"><svg id="goal" class="goal" viewBox="0 0 360 250" role="img" aria-label="Tor mit Torwart. Tippe links, Mitte oder rechts, um zu schießen."></svg></div>
+          <p class="final-call" id="finalCall" aria-live="polite"></p>
+        </div>
+
+        <div class="stage stage-champ" id="stageChamp" hidden>
+          <svg class="champ-crown" aria-hidden="true"><use href="#i-crown"/></svg>
+          <p class="kicker kicker-gold">FCA Bier-Roulette Champion</p>
+          <h2 class="champ-name" id="champName"></h2>
+          <p class="champ-meta" id="champMeta"></p>
+          <p class="champ-quip" id="champQuip"></p>
+          <p class="champ-order" id="champOrder"></p>
+        </div>
+      </div>
+
+      <div class="ticker" id="ticker" aria-live="polite">
+        <span class="ticker-label" id="tickerLabel"></span>
+        <p class="ticker-text" id="tickerText"></p>
+      </div>
+
+      <div class="cta-zone" id="ctaZone">
+        <button type="button" class="cta" id="cta">Saufen?</button>
+      </div>
+    </section>
+
+    <!-- Statistik -->
+    <section class="view view-page" id="view-stats" hidden aria-labelledby="statsTitle">
+      <h1 class="page-title" id="statsTitle">Statistik</h1>
+      <div class="champ-card" id="champCard"></div>
+      <div class="seg" role="group" aria-label="Zeitraum">
+        <button type="button" id="rangeToday" aria-pressed="true" title="Seit 6 Uhr früh">Heute</button>
+        <button type="button" id="rangeAll" aria-pressed="false">Gesamt</button>
+      </div>
+      <div class="kpis" id="kpis"></div>
+      <div id="table"></div>
+      <p class="caption">Biere: wie oft jemand holen musste, verlorenes Finale eingerechnet. Titel: gewonnene Elfmeterschießen.</p>
+      <h2 class="section-title">Ehrentafel</h2>
+      <div id="honors"></div>
+    </section>
+
+    <!-- Kader -->
+    <section class="view view-page" id="view-squad" hidden aria-labelledby="squadTitle">
+      <h1 class="page-title" id="squadTitle">Kader</h1>
+      <p class="lede" id="squadNote"></p>
+      <ul class="roster" id="roster"></ul>
+      <form class="add" id="addForm" autocomplete="off">
+        <label class="sr" for="nameInput">Name des neuen Mitspielers</label>
+        <input id="nameInput" name="name" type="text" maxlength="16" placeholder="Neuer Mitspieler" enterkeyhint="done">
+        <button type="submit" class="btn" id="addBtn">Hinzufügen</button>
+      </form>
+      <div class="round-tools" id="roundTools" hidden>
+        <p>Eine Runde läuft. Kader-Änderungen gelten ab der nächsten Runde.</p>
+        <button type="button" class="btn ghost" id="abortBtn">Runde abbrechen</button>
+      </div>
+
+      <h2 class="section-title">Einstellungen</h2>
+      <div class="setting">
+        <p>Ton<small>Klackern, Pfiff und Jubel</small></p>
+        <label class="switch"><input type="checkbox" id="soundToggle"><span class="track"></span><span class="sr">Ton an oder aus</span></label>
+      </div>
+      <div class="setting">
+        <p>Vibration<small>Funktioniert nur auf Android-Handys</small></p>
+        <label class="switch"><input type="checkbox" id="vibeToggle"><span class="track"></span><span class="sr">Vibration an oder aus</span></label>
+      </div>
+      <div class="setting">
+        <p>Statistik zurücksetzen<small>Löscht alle Runden, der Kader bleibt.</small></p>
+        <button type="button" class="btn ghost" id="resetBtn">Zurücksetzen</button>
+      </div>
+      <p class="footnote">Gespeichert auf diesem Handy · Version <span id="version"></span><br>Private Fan-App, keine offizielle App des FC Augsburg.</p>
+    </section>
+  </main>
+
+  <nav class="tabbar" aria-label="Bereiche">
+    <button type="button" class="tab" data-tab="game" aria-current="page"><svg aria-hidden="true"><use href="#i-wheel"/></svg><span>Spiel</span></button>
+    <button type="button" class="tab" data-tab="stats"><svg aria-hidden="true"><use href="#i-chart"/></svg><span>Statistik</span></button>
+    <button type="button" class="tab" data-tab="squad"><svg aria-hidden="true"><use href="#i-team"/></svg><span>Kader</span></button>
+  </nav>
+</div>
+
+<div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
+<section class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetName">
+  <span class="sheet-label">Bierholer:</span>
+  <h2 class="sheet-name" id="sheetName"></h2>
+  <p class="sheet-meta" id="sheetMeta"></p>
+  <p class="sheet-quip" id="sheetQuip"></p>
+  <div class="sheet-actions">
+    <button type="button" class="sheet-undo" id="sheetUndo">Rückgängig</button>
+    <button type="button" class="sheet-next" id="sheetNext">Weiter</button>
+  </div>
+</section>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
