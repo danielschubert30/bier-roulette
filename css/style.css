@@ -455,3 +455,20 @@ button { touch-action: manipulation; }
 .round-state { overflow: hidden; text-overflow: ellipsis; }
 #saldo .kicker { margin-top: 6px; }
 #saldo { display: flex; flex-direction: column; gap: 10px; }
+
+/* ---------- Gäste ---------- */
+.presence-head { margin: 10px 0 4px; font-family: var(--font-label); font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--chalk-3); list-style: none; }
+.presence-head:first-child { margin-top: 0; }
+.presence-add { margin-top: 8px; }
+.presence-add input { height: 46px; }
+.presence-add .btn { height: 46px; }
+.add-box { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
+.guest-tag { margin-left: 6px; font-family: var(--font-label); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--chalk-3); }
+.player.is-guest .player-name { font-size: 19px; }
+.player-actions { display: flex; align-items: center; gap: 4px; }
+
+.sheet-plain .sheet-actions { position: sticky; bottom: calc(-18px - env(safe-area-inset-bottom, 0px)); margin-bottom: calc(-18px - env(safe-area-inset-bottom, 0px)); padding: 10px 0 calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--surface-3); }
+.presence-list label { min-height: 48px; }
+.pot.is-dense { gap: 5px; }
+.pot.is-dense .chip { height: 25px; font-size: 13px; padding: 0 8px 0 6px; gap: 5px; }
+.pot.is-dense .chip .dot { width: 8px; height: 8px; }

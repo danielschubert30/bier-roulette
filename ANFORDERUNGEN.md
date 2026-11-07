@@ -11,7 +11,7 @@ Legende: `[x]` umgesetzt · `[ ]` offen
 - [x] **A3 Champion:** Der Sieger des Finales holt als Einziger kein Bier und wird „FCA Bier-Roulette Champion“. Der Titel bleibt sichtbar, bis es einen neuen Champion gibt.
 - [x] **A4 Neue Runde:** Danach startet eine neue Runde mit allen Anwesenden.
 - [x] **A5 Rückgängig:** Die letzte Ziehung lässt sich zurücknehmen (Fehltipp).
-- [x] **A6 Mitspieler:** Im Kader pro Mitspieler ein Schalter „spielt mit“; maximal 8 auf dem Rad, bis zu 12 im Kader.
+- [x] **A6 Mitspieler:** Im Kader pro Stammspieler ein Schalter „spielt mit“; bis zu 10 Stammspieler, Rad mit bis zu 12 Feldern (inkl. Gäste), Kader bis 20.
 - [x] **A7 Faire Auslosung:** Jeder im Topf hat die gleiche Chance; angezeigt wird immer das Segment unter dem Zeiger.
 
 ### Runden über mehrere Spieltage (beauftragt 07.11.2026)
@@ -20,6 +20,12 @@ Legende: `[x]` umgesetzt · `[ ]` offen
 - [x] **A9 Mitlosen mit Bierschuld:** Wer fehlt, bleibt ausgegraut im Topf. Wird er gezogen, fliegt er raus und schuldet eine Runde; fürs aktuelle Bier wird sofort nachgedreht. Offene Schulden erscheinen beim nächsten Treffen als Hinweis und werden mit „Eingelöst“ abgehakt.
 - [x] **A10 Finale, wenn einer fehlt:** Wahl im Moment: „Nächstes Mal nachholen“ (Finale wird geparkt, für den Abend startet eine neue Runde) oder „verliert kampflos“ (Fehlender schuldet das letzte Bier, der andere wird Champion). Fehlen beide, wird nachgeholt.
 - [x] **A11 Offene Finals nachholen:** Geparkte Finals erscheinen als Hinweis; sind beide da, „Jetzt spielen“. Fehlt wieder einer, kann man dort kampflos werten.
+
+### Gäste und flexibler Kader (beauftragt 07.11.2026)
+
+- [x] **A12 Gäste:** Gäste stehen im Kader und kommen nur an Abenden aufs Rad, an denen sie in der Anwesenheit eingeschaltet sind (neue Gäste direkt dort eintragen). Wird ein Gast gezogen, holt er wie alle anderen. Fehlende Gäste sammeln keine Bierschulden. Gäste stehen in Statistik und Bier-Saldo.
+- [x] **A13 Gastrunde:** Ein Finale spielen nur Stammspieler. Sind nur noch zwei Stammspieler übrig, kommen zuerst die Gäste aufs Rad; danach folgt das Finale.
+- [x] **A14 Kader jederzeit ändern:** Neue Stammspieler kommen sofort in die laufende Runde. Wer ausgeschaltet oder gelöscht wird, verlässt sie ohne Bierschuld (nicht möglich für Finalisten oder die letzten zwei). Gäste lassen sich mit „Aufnehmen“ zum Stammspieler machen.
 
 ## B – Inhalte
 

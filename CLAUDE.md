@@ -40,19 +40,20 @@
 
 ### Datenmodell (`js/store.js`)
 
-- `players`: `{id, name, color, active}` – Kader, max. 12; `active` = spielt mit (max. 8).
+- `players`: `{id, name, color, active, guest}` – Kader, max. 20 (`MAX_ROSTER`). Stammspieler: `active` = spielt mit, max. 10 (`MAX_WHEEL`). Gäste (`guest: true`) sind nie `active`; sie stehen nur im Topf, solange sie heute als anwesend markiert sind (`syncRoundMembers`). Rad max. 12 Felder (`MAX_ON_WHEEL`).
 - `presence`: `{day, ids}` – wer an diesem Abend da ist. Ein Abend geht bis 6 Uhr früh (`dayStart`). Ohne Eintrag für heute fragt die App vor dem ersten Dreh nach.
 - `round`: laufende Runde – `pot` (alle Mitspieler beim Start, auch Fehlende), `picks` (`{id, at, absent, beers, debtId}`), `final` (Elfmeterschießen mit `shots`, `winner`, `loser`, `forfeit`, `postponed`, `beers`, `debtId`).
 - `pending`: Runden mit verschobenem Finale (werden über Hinweise nachgeholt).
 - `rounds`: abgeschlossene Runden in Reihenfolge des Abschlusses. Champion = Sieger der zuletzt abgeschlossenen Runde.
 - `debts`: Bierschulden `{id, playerId, at, roundId, reason: pick|forfeit, name, color, settledAt, beers}`.
 - `beers` = Anzahl Anwesender (Mitspieler) im Moment des Holens. Daraus rechnet die Statistik den Bier-Saldo pro Saison (Juli–Juni): geholte Biere minus Saisonschnitt × Anzahl.
-- Kader-Änderungen gelten ab der nächsten Runde; die laufende Runde arbeitet mit ihrem `pot`.
+- Kader-Änderungen wirken sofort: neue Stammspieler kommen in den `pot` der laufenden Runde (`joinRound`), ausgeschaltete oder gelöschte verlassen ihn ohne Schuld (`leaveRound`, gesperrt für Finalisten und die letzten zwei: `leaveBlocker`). Im Finale gelten Neue erst ab der nächsten Runde.
 
-### Spielregeln bei Fehlenden
+### Spielregeln bei Fehlenden und Gästen
 
 - Wer fehlt, bleibt im Topf (Rad ausgegraut). Gezogen → raus, Bierschuld, sofort nachdrehen.
 - Finale mit Fehlendem: Auswahl „Nächstes Mal nachholen“ (→ `pending`, neue Runde startet) oder „kampflos“ (Fehlender verliert, Schuld).
+- Gäste spielen kein Finale: Sind nur noch zwei Stammspieler übrig und noch Gäste im Topf, ist „Gastrunde“ (nur Gäste auf dem Rad, `isGuestRound`). Das Finale startet erst, wenn `finalDue` gilt.
 - Diese Regeln sind mit Daniel abgestimmt (07.11.2026); Änderungen nur nach Rücksprache.
 
 ## Lokal testen

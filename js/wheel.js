@@ -105,7 +105,7 @@ export function createWheel(svg, { logoHref }) {
       const mid = (i + 0.5) * seg;
       const [x, y] = polar(R * 0.6, mid);
       const rot = n === 1 ? 0 : mid <= 180 ? mid - 90 : mid + 90;
-      let fs = n <= 3 ? 28 : n <= 5 ? 25 : n === 6 ? 23 : 20;
+      let fs = n <= 3 ? 28 : n <= 5 ? 25 : n === 6 ? 23 : n <= 8 ? 20 : n <= 10 ? 17 : 15;
       const room = R * 0.6;
       if (p.name.length * fs * 0.5 > room) fs = Math.max(11, room / (p.name.length * 0.5));
       const t = el("text", {

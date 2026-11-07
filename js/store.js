@@ -5,11 +5,13 @@ const KEY = "fca-bier-roulette:v1";
 
 export const PALETTE = [
   "#c8102e", "#1f6fb2", "#c88a0c", "#7b3fa0", "#0f8a6b", "#d4572a",
-  "#b5179e", "#3d5a80", "#8a6d3b", "#2e7d32", "#ad1457", "#455a64"
+  "#b5179e", "#3d5a80", "#8a6d3b", "#2e7d32", "#ad1457", "#455a64",
+  "#00838f", "#5e35b1", "#6d4c41", "#827717"
 ];
 export const DEFAULT_NAMES = ["Betzmeister", "Cousin", "Demharter M.", "Emilio", "Schaufi", "Schubi"];
-export const MAX_WHEEL = 8;
-export const MAX_ROSTER = 12;
+export const MAX_WHEEL = 10;      // Stammspieler, die mitspielen
+export const MAX_ON_WHEEL = 12;   // Felder auf dem Rad insgesamt (Stammspieler + Gäste des Abends)
+export const MAX_ROSTER = 20;     // Kader inklusive Gäste
 export const MAX_NAME = 16;
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -54,7 +56,11 @@ function normPlayer(p, i) {
   if (!p || !ID.test(String(p.id || ""))) return null;
   const name = cleanName(p.name);
   if (!name) return null;
-  return { id: String(p.id), name, color: HEX.test(p.color) ? p.color : PALETTE[i % PALETTE.length], active: p.active !== false };
+  const guest = p.guest === true;   // Gast: kommt nur an Abenden aufs Rad, an denen er da ist
+  return {
+    id: String(p.id), name, color: HEX.test(p.color) ? p.color : PALETTE[i % PALETTE.length],
+    active: !guest && p.active !== false, guest
+  };
 }
 
 function normRound(r) {
@@ -123,7 +129,7 @@ export function load() {
   const seen = new Set();
   state.players = players.filter((p) => (seen.has(p.id) ? false : seen.add(p.id))).slice(0, MAX_ROSTER);
   let active = 0;
-  for (const p of state.players) if (p.active && ++active > MAX_WHEEL) p.active = false;
+  for (const p of state.players) if (!p.guest && p.active && ++active > MAX_WHEEL) p.active = false;
   state.round = normRound(raw.round);
   state.rounds = (Array.isArray(raw.rounds) ? raw.rounds : []).map(normRound).filter((r) => r && r.final && r.final.winner);
   state.pending = (Array.isArray(raw.pending) ? raw.pending : []).map(normRound).filter((r) => r && r.final && !r.final.winner);

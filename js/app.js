@@ -1,10 +1,10 @@
 // FCA Bier-Roulette – Ablauf und Oberfläche.
-import { load, save, MAX_WHEEL, MAX_ROSTER, PALETTE, rand, uid, cleanName } from "./store.js";
+import { load, save, MAX_WHEEL, MAX_ON_WHEEL, MAX_ROSTER, PALETTE, rand, uid, cleanName } from "./store.js";
 import { createWheel } from "./wheel.js";
 import * as SO from "./shootout.js";
 import { SPIN_QUIPS, RESULT_QUIPS, FINAL_INTROS, CHAMPION_QUIPS, SHOT_TEXT, FCA_FACTS } from "./content.js";
 
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.2.0";
 const NS = "http://www.w3.org/2000/svg";
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const $ = (id) => document.getElementById(id);
@@ -21,7 +21,8 @@ const els = {
   sheet: $("sheet"), sheetBackdrop: $("sheetBackdrop"), sheetLabel: $("sheetLabel"), sheetName: $("sheetName"),
   sheetMeta: $("sheetMeta"), sheetQuip: $("sheetQuip"), sheetUndo: $("sheetUndo"), sheetNext: $("sheetNext"),
   presenceSheet: $("presenceSheet"), presenceList: $("presenceList"), presenceNote: $("presenceNote"),
-  presenceCancel: $("presenceCancel"), presenceOk: $("presenceOk"),
+  presenceCancel: $("presenceCancel"), presenceOk: $("presenceOk"), guestForm: $("guestForm"), guestInput: $("guestInput"),
+  guestRoster: $("guestRoster"), roleReg: $("roleReg"), roleGuest: $("roleGuest"),
   champCard: $("champCard"), rangeToday: $("rangeToday"), rangeSeason: $("rangeSeason"), rangeAll: $("rangeAll"),
   kpis: $("kpis"), table: $("table"), seasonSel: $("seasonSel"), saldo: $("saldo"), debts: $("debts"), honors: $("honors"),
   squadNote: $("squadNote"), roster: $("roster"), addForm: $("addForm"), nameInput: $("nameInput"), addBtn: $("addBtn"),
@@ -31,7 +32,7 @@ const els = {
 
 const state = load();
 const ui = {
-  tab: "game", range: "season", seasonStart: null,
+  tab: "game", range: "season", seasonStart: null, addAsGuest: false,
   spinning: false, shooting: false, sheetFor: null, sheetDebt: false, presenceCb: null,
   playingId: null,       // offenes Finale, das gerade nachgeholt wird
   champRoundId: null,    // Champion-Anzeige für ein nachgeholtes Finale
@@ -133,16 +134,71 @@ function persist() {
   }
 }
 
-/* ---------- Anwesenheit ---------- */
-const activePlayers = () => state.players.filter((p) => p.active);
+/* ---------- Anwesenheit, Stammspieler und Gäste ---------- */
+const activePlayers = () => state.players.filter((p) => !p.guest && p.active);   // Stammspieler, die mitspielen
+const guestList = () => state.players.filter((p) => p.guest);
 const presenceSet = () => !!state.presence && state.presence.day === todayKey();
-const isPresent = (id) => (presenceSet() ? state.presence.ids.includes(id) : true);
-const presentCount = () => activePlayers().filter((p) => isPresent(p.id)).length;
+function isGuestId(id) {
+  const p = state.players.find((x) => x.id === id);
+  if (p) return !!p.guest;
+  const q = state.round && state.round.pot.find((x) => x.id === id);
+  return !!(q && q.guest);
+}
+// Ohne Eintrag für heute gelten Stammspieler als da und Gäste als nicht da
+const isPresent = (id) => (presenceSet() ? state.presence.ids.includes(id) : !isGuestId(id));
+const presentGuests = () => guestList().filter((p) => isPresent(p.id));
+const presentCount = () => activePlayers().filter((p) => isPresent(p.id)).length + presentGuests().length;
+const guestSlots = () => Math.max(0, MAX_ON_WHEEL - activePlayers().length);
 
 /* ---------- Runden und Daten ---------- */
 function remaining(round) {
   const out = new Set(round.picks.map((k) => k.id));
   return round.pot.filter((p) => !out.has(p.id));
+}
+const remainingRegs = (r) => remaining(r).filter((p) => !p.guest);
+const remainingGuests = (r) => remaining(r).filter((p) => p.guest);
+// Gastrunde: Sind nur noch zwei Stammspieler übrig, kommen zuerst die Gäste dran. Das Finale bleibt unter Stammspielern.
+const isGuestRound = (r) => remainingRegs(r).length <= 2 && remainingGuests(r).length > 0;
+const finalDue = (r) => !r.final && remainingRegs(r).length <= 2 && remainingGuests(r).length === 0;
+function wheelList(r) {
+  return isGuestRound(r) ? remainingGuests(r) : remaining(r);
+}
+// Gäste stehen nur im Topf, solange sie an diesem Abend da sind
+function syncRoundMembers() {
+  const r = state.round;
+  if (!r || r.final || ui.spinning || ui.sheetFor) return;
+  const picked = new Set(r.picks.map((k) => k.id));
+  const before = r.pot.length;
+  r.pot = r.pot.filter((p) => !p.guest || picked.has(p.id) || (isPresent(p.id) && state.players.some((x) => x.id === p.id)));
+  let changed = r.pot.length !== before;
+  for (const g of presentGuests()) {
+    if (!r.pot.some((p) => p.id === g.id)) {
+      r.pot.push({ id: g.id, name: g.name, color: g.color, active: false, guest: true });
+      changed = true;
+    }
+  }
+  if (changed) persist();
+}
+function joinRound(p) {
+  const r = state.round;
+  if (!r || r.pot.some((x) => x.id === p.id)) return;
+  if (r.final) { toast(`${p.name} spielt ab der nächsten Runde mit.`); return; }
+  r.pot.push({ id: p.id, name: p.name, color: p.color, active: true, guest: false });
+  toast(`${p.name} ist ab sofort im Topf.`);
+}
+// Darf jemand die laufende Runde verlassen? Gibt den Grund zurück, wenn nicht.
+function leaveBlocker(id) {
+  const name = (state.players.find((x) => x.id === id) || {}).name || "Er";
+  const finals = [state.round, ...state.pending].filter((r) => r && r.final && !r.final.winner);
+  if (finals.some((r) => r.final.a === id || r.final.b === id)) return `${name} steht im Finale. Erst danach möglich.`;
+  const r = state.round;
+  if (r && !r.final && remainingRegs(r).some((p) => p.id === id) && remainingRegs(r).length <= 2) return `${name} ist schon unter den letzten zwei.`;
+  return null;
+}
+function leaveRound(id) {
+  const r = state.round;
+  if (!r || r.final) return;
+  if (remaining(r).some((p) => p.id === id)) r.pot = r.pot.filter((p) => p.id !== id);
 }
 function finalRound() {
   if (ui.playingId) return state.pending.find((r) => r.id === ui.playingId) || null;
@@ -324,18 +380,22 @@ function finalNeedsDecision(r) {
 function tickerFor(mode) {
   if (mode === "idle") {
     const n = activePlayers().length;
-    if (n < 2) return { label: "Kader", text: "Schalte im Kader mindestens zwei Mitspieler ein." };
+    if (n < 2) return { label: "Kader", text: "Schalte im Kader mindestens zwei Stammspieler ein." };
     if (!presenceSet()) return { label: "Bereit", text: `Neue Runde mit ${n} im Topf. Vor dem ersten Dreh fragt die App, wer heute da ist.` };
-    return { label: "Bereit", text: `${presentCount()} von ${n} heute da. Alle ${n} kommen in den Topf, wer fehlt, wird ausgegraut.` };
+    const g = presentGuests().length;
+    return { label: "Bereit", text: `${presentCount() - g} von ${n} Stammspielern da` + (g ? ` plus ${g} ${g === 1 ? "Gast" : "Gäste"}` : "") + ". Wer fehlt, wird ausgegraut." };
   }
   if (mode === "spin") {
     const r = state.round;
-    const rem = remaining(r);
-    const away = rem.filter((p) => !isPresent(p.id)).length;
+    const list = wheelList(r);
     const no = r.picks.filter((k) => !k.absent).length + 1;
+    if (isGuestRound(r)) {
+      return { label: `Gastrunde · Bier Nr. ${no}`, text: "Nur noch die Gäste sind auf dem Rad. Das Finale bleibt unter Stammspielern." };
+    }
+    const away = list.filter((p) => !isPresent(p.id)).length;
     return {
       label: `Bier Nr. ${no}`,
-      text: `${rem.length} im Topf` + (away ? `, davon ${away} heute nicht da` : "") + `. Risiko je ${pctF.format(1 / rem.length)}.`
+      text: `${list.length} im Topf` + (away ? `, davon ${away} heute nicht da` : "") + `. Risiko je ${pctF.format(1 / list.length)}.`
     };
   }
   if (mode === "final") {
@@ -353,18 +413,20 @@ function tickerFor(mode) {
 
 /* ---------- Spielablauf ---------- */
 function startRound() {
-  const pot = activePlayers().map((p) => ({ id: p.id, name: p.name, color: p.color, active: true }));
-  if (pot.length < 2) return false;
+  const regs = activePlayers();
+  if (regs.length < 2) return false;
+  const pot = regs.map((p) => ({ id: p.id, name: p.name, color: p.color, active: true, guest: false }))
+    .concat(presentGuests().map((p) => ({ id: p.id, name: p.name, color: p.color, active: false, guest: true })));
   state.round = { id: uid("r"), startedAt: Date.now(), pot, picks: [], final: null };
   ui.newChamp = false;
   ui.wheelSig = "";
-  if (pot.length === 2) startFinal();
+  if (finalDue(state.round)) startFinal();
   persist();
   return true;
 }
 function startFinal() {
   const r = state.round;
-  const rem = remaining(r);
+  const rem = remainingRegs(r);
   r.final = SO.newFinal(rem[0].id, rem[1].id, rand);
   const a = infoOf(rem[0].id, r).name, b = infoOf(rem[1].id, r).name;
   ui.finalLine = { label: "Finale", text: `${a} gegen ${b}. ${pick(FINAL_INTROS)}` };
@@ -384,7 +446,7 @@ async function onCta() {
     return;
   }
   if (mode === "idle" && !startRound()) {
-    toast("Mindestens zwei Mitspieler im Kader einschalten.");
+    toast("Mindestens zwei Stammspieler im Kader einschalten.");
     return;
   }
   if (viewMode() !== "spin") { renderAll(true); return; }
@@ -481,7 +543,7 @@ function resultTexts(p) {
 function openSheet(p, absent) {
   ui.sheetFor = p.id;
   ui.sheetDebt = absent;
-  const lastTwo = remaining(state.round).length === 2;
+  const lastTwo = finalDue(state.round);
   els.sheet.classList.toggle("is-debt", absent);
   els.sheet.style.setProperty("--c", p.color);
   els.sheetName.textContent = p.name;
@@ -515,7 +577,7 @@ function sheetNext() {
   closeSheet();
   wheel.highlight(null);
   const r = state.round;
-  if (r && !r.final && remaining(r).length <= 2) {
+  if (r && finalDue(r)) {
     startFinal();
     persist();
     renderAll(true);
@@ -719,7 +781,7 @@ async function shoot(aim) {
 /* ---------- Darstellung: Spiel ---------- */
 function syncWheel(animate) {
   const mode = viewMode();
-  const base = mode === "spin" ? remaining(state.round) : mode === "idle" ? activePlayers() : [];
+  const base = mode === "spin" ? wheelList(state.round) : mode === "idle" ? activePlayers().concat(presentGuests()) : [];
   const list = base.map((p) => ({ id: p.id, name: p.name, color: p.color, absent: !isPresent(p.id) }));
   const sig = list.map((p) => p.id + p.color + p.name + (p.absent ? "-" : "+")).join("|");
   if (sig === ui.wheelSig) return;
@@ -748,8 +810,8 @@ function renderChrome() {
   else els.roundNo.textContent = `Runde ${mode === "champ" ? state.rounds.length : state.rounds.length + 1}`;
 
   let stateText = "";
-  if (mode === "idle") stateText = `${activePlayers().length} im Topf`;
-  else if (mode === "spin") stateText = `Bier Nr. ${r.picks.filter((k) => !k.absent).length + 1}`;
+  if (mode === "idle") stateText = `${activePlayers().length + presentGuests().length} im Topf`;
+  else if (mode === "spin") stateText = isGuestRound(r) ? "Gastrunde" : `Bier Nr. ${r.picks.filter((k) => !k.absent).length + 1}`;
   else if (mode === "final") stateText = "Finale";
   else stateText = "Entschieden";
   els.roundState.textContent = stateText;
@@ -757,22 +819,27 @@ function renderChrome() {
   els.pot.replaceChildren();
   if (mode === "idle") {
     for (const p of activePlayers()) els.pot.append(chip(p, isPresent(p.id) ? "" : "is-absent", null, isPresent(p.id) ? null : "fehlt"));
+    for (const p of presentGuests()) els.pot.append(chip(p, "", null, "Gast"));
   } else if (r) {
     const order = new Map(r.picks.map((k, i) => [k.id, { no: i + 1, debt: k.absent }]));
     if (r.final && r.final.loser) order.set(r.final.loser, { no: r.picks.length + 1, debt: r.final.forfeit });
     for (const p of r.pot) {
       const out = order.get(p.id);
-      if (out) { els.pot.append(chip(p, "is-out" + (out.debt ? " is-debt" : ""), out.no, out.debt ? "Schuld" : null)); continue; }
+      if (out) { els.pot.append(chip(p, "is-out" + (out.debt ? " is-debt" : ""), out.no, out.debt ? "Schuld" : p.guest ? "Gast" : null)); continue; }
       const inFinal = r.final && (r.final.a === p.id || r.final.b === p.id);
       const away = !isPresent(p.id) && mode !== "champ";
-      els.pot.append(chip(p, (inFinal ? "is-final" : "") + (away ? " is-absent" : ""), null, away ? "fehlt" : null));
+      els.pot.append(chip(p, (inFinal ? "is-final" : "") + (away ? " is-absent" : ""), null, away ? "fehlt" : p.guest ? "Gast" : null));
     }
   }
 
+  els.pot.classList.toggle("is-dense", els.pot.children.length > 8);
   els.undoBtn.hidden = !(mode === "spin" && state.round.picks.length > 0 && !ui.spinning && !ui.sheetFor);
   const busy = ui.spinning || ui.shooting || !!ui.sheetFor;
   els.presenceBtn.disabled = busy;
-  els.presenceBtn.textContent = presenceSet() ? `${presentCount()}/${activePlayers().length} da` : "Wer ist da?";
+  const gHere = presentGuests().length;
+  els.presenceBtn.textContent = presenceSet()
+    ? `${presentCount() - gHere}/${activePlayers().length} da` + (gHere ? ` +${gHere}` : "")
+    : "Wer ist da?";
   els.presenceBtn.classList.toggle("is-due", !presenceSet());
 
   els.ctaZone.hidden = mode === "final";
@@ -929,8 +996,9 @@ function renderChampion() {
 }
 
 function renderGame(animate) {
+  syncRoundMembers();
   let mode = viewMode();
-  if (mode === "spin" && remaining(state.round).length <= 2 && !ui.sheetFor && !ui.spinning) {
+  if (mode === "spin" && finalDue(state.round) && !ui.sheetFor && !ui.spinning) {
     startFinal();
     persist();
     mode = "final";
@@ -954,25 +1022,55 @@ function openPresence(cb) {
   if (ui.spinning || ui.shooting || ui.sheetFor) return;
   ui.presenceCb = cb || null;
   els.presenceList.replaceChildren();
-  for (const p of activePlayers()) {
-    const li = h("li");
-    const lab = h("label");
-    lab.style.setProperty("--c", p.color);
-    const cbx = document.createElement("input");
-    cbx.type = "checkbox";
-    cbx.id = "here-" + p.id;
-    cbx.value = p.id;
-    cbx.checked = presenceSet() ? isPresent(p.id) : true;
-    const sw = h("span", "switch");
-    sw.append(cbx, h("span", "track"));
-    lab.append(h("span", "dot"), h("span", "player-name", p.name), sw);
-    li.append(lab);
-    els.presenceList.append(li);
+  els.presenceList.append(h("li", "presence-head", "Stammspieler"));
+  for (const p of activePlayers()) els.presenceList.append(presenceRow(p, presenceSet() ? isPresent(p.id) : true));
+  const guests = guestList();
+  if (guests.length) {
+    els.presenceList.append(h("li", "presence-head", `Gäste · höchstens ${guestSlots()} heute`));
+    for (const p of guests) els.presenceList.append(presenceRow(p, isPresent(p.id)));
   }
-  els.presenceNote.textContent = "Wer fehlt, bleibt im Topf. Wird er gezogen, fliegt er raus und schuldet eine Runde, die er beim nächsten Mal einlöst.";
+  els.guestInput.value = "";
+  els.presenceNote.textContent = "Wer fehlt, bleibt im Topf. Wird er gezogen, fliegt er raus und schuldet eine Runde, die er beim nächsten Mal einlöst. Gäste kommen nur heute aufs Rad.";
   els.presenceSheet.hidden = false;
   els.sheetBackdrop.hidden = false;
   setTimeout(() => els.presenceOk.focus({ preventScroll: true }), 60);
+}
+function presenceRow(p, checked) {
+  const li = h("li");
+  const lab = h("label");
+  lab.style.setProperty("--c", p.color);
+  const cbx = document.createElement("input");
+  cbx.type = "checkbox";
+  cbx.id = "here-" + p.id;
+  cbx.value = p.id;
+  cbx.dataset.guest = p.guest ? "1" : "";
+  cbx.checked = checked;
+  cbx.addEventListener("change", () => {
+    if (!cbx.checked || !p.guest) return;
+    const guestsOn = els.presenceList.querySelectorAll('input[data-guest="1"]:checked').length;
+    if (guestsOn > guestSlots()) {
+      cbx.checked = false;
+      toast(`Das Rad hat ${MAX_ON_WHEEL} Felder. Heute passen höchstens ${guestSlots()} Gäste dazu.`);
+    }
+  });
+  const sw = h("span", "switch");
+  sw.append(cbx, h("span", "track"));
+  const name = h("span", "player-name", p.name);
+  if (p.guest) name.append(h("span", "guest-tag", "Gast"));
+  lab.append(h("span", "dot"), name, sw);
+  li.append(lab);
+  return li;
+}
+function addGuestHere(raw) {
+  const p = addPlayer(raw, true, true);
+  if (!p) return;
+  if (!els.presenceList.querySelector('input[data-guest="1"]')) {
+    els.presenceList.append(h("li", "presence-head", `Gäste · höchstens ${guestSlots()} heute`));
+  }
+  const on = els.presenceList.querySelectorAll('input[data-guest="1"]:checked').length < guestSlots();
+  els.presenceList.append(presenceRow(p, on));
+  if (!on) toast(`Das Rad ist voll. ${p.name} ist eingetragen, aber heute nicht auf dem Rad.`);
+  els.guestInput.value = "";
 }
 function closePresence(apply) {
   if (els.presenceSheet.hidden) return;
@@ -1001,7 +1099,7 @@ function computeTable() {
   const entry = (id, r) => {
     if (!map.has(id)) {
       const i = infoOf(id, r);
-      map.set(id, { id, name: i.name, color: i.color, got: 0, titles: 0, finals: 0 });
+      map.set(id, { id, name: i.name, color: i.color, guest: !!i.guest, got: 0, titles: 0, finals: 0 });
     }
     return map.get(id);
   };
@@ -1030,7 +1128,7 @@ function computeSaldo(start) {
   const avg = total / rec.length;
   const map = new Map();
   for (const x of rec) {
-    if (!map.has(x.id)) { const i = infoOf(x.id); map.set(x.id, { id: x.id, name: i.name, color: i.color, beers: 0, count: 0 }); }
+    if (!map.has(x.id)) { const i = infoOf(x.id); map.set(x.id, { id: x.id, name: i.name, color: i.color, guest: !!i.guest, beers: 0, count: 0 }); }
     const e = map.get(x.id);
     e.beers += x.beers;
     e.count++;
@@ -1069,7 +1167,9 @@ function crownIcon() {
 function whoCell(p) {
   const who = h("div", "who");
   who.style.setProperty("--c", p.color);
-  who.append(h("span", "dot"), h("span", null, p.name));
+  const name = h("span", null, p.name);
+  if (p.guest) name.append(h("span", "guest-tag", "Gast"));
+  who.append(h("span", "dot"), name);
   return who;
 }
 function renderStats() {
@@ -1239,25 +1339,9 @@ function renderSquad() {
   const mode = viewMode();
   const running = !!state.round && (mode === "spin" || mode === "final") && !ui.playingId;
   const activeN = activePlayers().length;
-  els.squadNote.textContent = `Eingeschaltet heißt: spielt mit. ${activeN} von höchstens ${MAX_WHEEL} sind eingeschaltet.`;
+  els.squadNote.textContent = `${activeN} von höchstens ${MAX_WHEEL} Stammspielern spielen mit, dazu passen an einem Abend Gäste bis zu ${MAX_ON_WHEEL} Feldern aufs Rad.`;
   const ev = duties(allRoundsAll());
-
-  els.roster.replaceChildren();
-  for (const p of state.players) {
-    const li = h("li", "player" + (p.active ? "" : " is-off"));
-    li.style.setProperty("--c", p.color);
-    const got = ev.filter((e) => e.id === p.id).length;
-    const titles = titlesOf(p.id);
-    const debts = openDebts().filter((d) => d.playerId === p.id).length;
-    const name = h("div", "player-name", p.name);
-    name.append(h("span", "player-meta", `${got}× dran · ${titles} Titel` + (debts ? ` · ${debts} offene Schuld` : "")));
-    const sw = h("label", "switch");
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.id = "on-" + p.id;
-    cb.checked = p.active;
-    cb.addEventListener("change", () => toggleActive(p.id, cb.checked));
-    sw.append(cb, h("span", "track"), h("span", "sr", `${p.name} spielt mit`));
+  const removeBtn = (p) => {
     const armed = ui.armed === "rm:" + p.id;
     const rm = h("button", "icon-btn" + (armed ? " is-armed" : ""), armed ? "Löschen?" : "×");
     rm.type = "button";
@@ -1266,15 +1350,50 @@ function renderSquad() {
       if (ui.armed === "rm:" + p.id) { disarm(); removePlayer(p.id); }
       else { arm("rm:" + p.id); renderSquad(); }
     });
-    li.append(h("span", "dot"), name, sw, rm);
+    return rm;
+  };
+  const nameCell = (p) => {
+    const got = ev.filter((e) => e.id === p.id).length;
+    const titles = titlesOf(p.id);
+    const debts = openDebts().filter((d) => d.playerId === p.id).length;
+    const name = h("div", "player-name", p.name);
+    name.append(h("span", "player-meta", `${got}× dran` + (p.guest ? "" : ` · ${titles} Titel`) + (debts ? ` · ${debts} offene Schuld` : "")));
+    return name;
+  };
+
+  els.roster.replaceChildren();
+  for (const p of state.players.filter((x) => !x.guest)) {
+    const li = h("li", "player" + (p.active ? "" : " is-off"));
+    li.style.setProperty("--c", p.color);
+    const sw = h("label", "switch");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.id = "on-" + p.id;
+    cb.checked = p.active;
+    cb.addEventListener("change", () => toggleActive(p.id, cb.checked));
+    sw.append(cb, h("span", "track"), h("span", "sr", `${p.name} spielt mit`));
+    li.append(h("span", "dot"), nameCell(p), sw, removeBtn(p));
     els.roster.append(li);
   }
-  if (!state.players.length) els.roster.append(h("li", "empty", "Noch niemand im Kader."));
+  if (!state.players.some((x) => !x.guest)) els.roster.append(h("li", "empty", "Noch keine Stammspieler."));
 
+  els.guestRoster.replaceChildren();
+  for (const p of guestList()) {
+    const li = h("li", "player is-guest");
+    li.style.setProperty("--c", p.color);
+    const up = btn("mini-btn ghost", "Aufnehmen", () => promoteGuest(p.id));
+    up.title = "Zum Stammspieler machen";
+    li.append(h("span", "dot"), nameCell(p), up, removeBtn(p));
+    els.guestRoster.append(li);
+  }
+  if (!guestList().length) els.guestRoster.append(h("li", "empty", "Noch keine Gäste. Am einfachsten im Spiel unter „Anwesenheit“ eintragen."));
+
+  els.roleReg.setAttribute("aria-pressed", String(!ui.addAsGuest));
+  els.roleGuest.setAttribute("aria-pressed", String(ui.addAsGuest));
   const full = state.players.length >= MAX_ROSTER;
   els.nameInput.disabled = full;
   els.addBtn.disabled = full;
-  els.nameInput.placeholder = full ? `Kader voll (max. ${MAX_ROSTER})` : "Neuer Mitspieler";
+  els.nameInput.placeholder = full ? `Kader voll (max. ${MAX_ROSTER})` : ui.addAsGuest ? "Name des Gastes" : "Name des Stammspielers";
 
   els.roundTools.hidden = !running;
   const abortArmed = ui.armed === "abort";
@@ -1289,39 +1408,81 @@ function renderSquad() {
   els.resetBtn.disabled = !state.rounds.length && !state.round && !state.pending.length && !state.debts.length;
 }
 function toggleActive(id, on) {
+  const p = state.players.find((x) => x.id === id);
+  if (!p) return;
   if (on && activePlayers().length >= MAX_WHEEL) {
-    toast(`Höchstens ${MAX_WHEEL} Mitspieler aufs Rad.`);
+    toast(`Höchstens ${MAX_WHEEL} Stammspieler spielen mit.`);
     renderSquad();
     return;
   }
-  state.players = state.players.map((p) => (p.id === id ? { ...p, active: on } : p));
-  if (on && presenceSet() && !state.presence.ids.includes(id)) state.presence.ids.push(id);
+  if (!on) {
+    const why = leaveBlocker(id);
+    if (why) { toast(why); renderSquad(); return; }
+  }
+  p.active = on;
+  if (on) {
+    if (presenceSet() && !state.presence.ids.includes(id)) state.presence.ids.push(id);
+    joinRound(p);
+  } else if (state.round && remaining(state.round).some((x) => x.id === id)) {
+    leaveRound(id);
+    toast(`${p.name} verlässt die laufende Runde ohne Bierschuld.`);
+  }
   persist();
   renderSquad();
   renderGame(false);
 }
-function addPlayer(raw) {
+// Legt einen Stammspieler oder Gast an. inSheet: aus der Anwesenheits-Abfrage (dort wird die Anwesenheit erst beim Übernehmen gespeichert).
+function addPlayer(raw, guest, inSheet) {
   const name = cleanName(raw);
-  if (!name) { toast("Bitte einen Namen eingeben."); return false; }
-  if (state.players.length >= MAX_ROSTER) { toast(`Höchstens ${MAX_ROSTER} im Kader.`); return false; }
-  if (state.players.some((p) => p.name.toLowerCase() === name.toLowerCase())) { toast(`${name} ist schon im Kader.`); return false; }
+  if (!name) { toast("Bitte einen Namen eingeben."); return null; }
+  if (state.players.length >= MAX_ROSTER) { toast(`Höchstens ${MAX_ROSTER} im Kader.`); return null; }
+  if (state.players.some((p) => p.name.toLowerCase() === name.toLowerCase())) { toast(`${name} ist schon im Kader.`); return null; }
   const used = new Set(state.players.map((p) => p.color.toLowerCase()));
   const color = PALETTE.find((c) => !used.has(c)) || PALETTE[state.players.length % PALETTE.length];
-  const active = activePlayers().length < MAX_WHEEL;
-  const id = uid("p");
-  state.players.push({ id, name, color, active });
-  if (presenceSet()) state.presence.ids.push(id);
+  const p = { id: uid(guest ? "g" : "p"), name, color, active: false, guest: !!guest };
+  if (!guest) p.active = activePlayers().length < MAX_WHEEL;
+  state.players.push(p);
+  if (!inSheet) {
+    if (!guest) {
+      if (presenceSet()) state.presence.ids.push(p.id);
+      if (p.active) joinRound(p);
+      else toast(`${name} ist im Kader, aber ausgeschaltet. Es spielen schon ${MAX_WHEEL} mit.`);
+    } else if (presenceSet() && presentGuests().length < guestSlots()) {
+      state.presence.ids.push(p.id);
+      toast(`${name} ist heute als Gast dabei.`);
+    } else {
+      toast(`${name} ist als Gast eingetragen. Unter „Anwesenheit“ kommt er aufs Rad.`);
+    }
+  }
   persist();
-  if (!active) toast(`${name} ist im Kader, aber ausgeschaltet. Das Rad ist voll.`);
+  if (!inSheet) { renderSquad(); renderGame(false); }
+  return p;
+}
+function promoteGuest(id) {
+  const p = state.players.find((x) => x.id === id);
+  if (!p) return;
+  p.guest = false;
+  p.active = activePlayers().length < MAX_WHEEL;
+  const r = state.round;
+  const inPot = r && r.pot.find((x) => x.id === id);
+  if (inPot) { inPot.guest = false; inPot.active = true; }
+  else if (p.active) joinRound(p);
+  persist();
+  toast(p.active ? `${p.name} ist jetzt Stammspieler.` : `${p.name} ist jetzt Stammspieler, aber ausgeschaltet. Es spielen schon ${MAX_WHEEL} mit.`);
   renderSquad();
   renderGame(false);
-  return true;
 }
 function removePlayer(id) {
   const p = state.players.find((x) => x.id === id);
+  if (!p) return;
+  const why = leaveBlocker(id);
+  if (why) { toast(why); renderSquad(); return; }
+  const wasInRound = state.round && remaining(state.round).some((x) => x.id === id);
+  leaveRound(id);
   state.players = state.players.filter((x) => x.id !== id);
+  if (state.presence) state.presence.ids = state.presence.ids.filter((x) => x !== id);
   persist();
-  if (p) toast(`${p.name} ist nicht mehr im Kader. Statistik und Schulden bleiben.`);
+  toast(`${p.name} ist nicht mehr im Kader` + (wasInRound ? " und verlässt die Runde ohne Bierschuld." : ".") + " Die Statistik bleibt.");
   renderSquad();
   renderGame(false);
 }
@@ -1374,7 +1535,13 @@ els.rangeAll.addEventListener("click", () => { ui.range = "all"; renderStats(); 
 els.seasonSel.addEventListener("change", () => { ui.seasonStart = Number(els.seasonSel.value); renderSaldo(); });
 els.addForm.addEventListener("submit", (e) => {
   e.preventDefault();
-  if (addPlayer(els.nameInput.value)) els.nameInput.value = "";
+  if (addPlayer(els.nameInput.value, ui.addAsGuest, false)) els.nameInput.value = "";
+});
+els.roleReg.addEventListener("click", () => { ui.addAsGuest = false; renderSquad(); });
+els.roleGuest.addEventListener("click", () => { ui.addAsGuest = true; renderSquad(); });
+els.guestForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  addGuestHere(els.guestInput.value);
 });
 els.abortBtn.addEventListener("click", () => {
   if (ui.armed !== "abort") { arm("abort"); renderSquad(); return; }

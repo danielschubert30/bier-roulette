@@ -17,6 +17,12 @@ Wer holt das nächste Bier? Das Glücksrad für unsere FCA-Runde im Stadion.
 - Fehlt ein Finalist, entscheidet ihr: Finale nachholen oder kampflos.
 - Der Bier-Saldo gleicht über die Saison aus, dass man bei kleinen Runden weniger Bier holen muss.
 
+## Gäste und Kader
+
+- Bis zu 10 Stammspieler, dazu Gäste: Das Rad hat höchstens 12 Felder.
+- Gäste trägst du unter „Anwesenheit“ ein. Sie drehen nur an diesem Abend mit, stehen aber in der Statistik. Ein Finale spielen nur Stammspieler.
+- Stammspieler lassen sich jederzeit hinzufügen oder entfernen, auch mitten in einer Runde.
+
 Gespeichert wird vorerst auf dem Handy, auf dem gedreht wird.
 
 ## Für die Weiterentwicklung

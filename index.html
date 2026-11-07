@@ -120,15 +120,28 @@
     <section class="view view-page" id="view-squad" hidden aria-labelledby="squadTitle">
       <h1 class="page-title" id="squadTitle">Kader</h1>
       <p class="lede" id="squadNote"></p>
-      <p class="caption">Wer an einem Abend fehlt, stellst du im Spiel unter „Anwesenheit“ ein. Der Schalter hier legt fest, wer überhaupt mitspielt.</p>
+      <div class="add-box">
+        <div class="seg" role="group" aria-label="Neu als">
+          <button type="button" id="roleReg" aria-pressed="true">Stammspieler</button>
+          <button type="button" id="roleGuest" aria-pressed="false">Gast</button>
+        </div>
+        <form class="add" id="addForm" autocomplete="off">
+          <label class="sr" for="nameInput">Name</label>
+          <input id="nameInput" name="name" type="text" maxlength="16" placeholder="Name" enterkeyhint="done">
+          <button type="submit" class="btn" id="addBtn">Hinzufügen</button>
+        </form>
+      </div>
+
+      <h2 class="section-title">Stammspieler</h2>
+      <p class="caption">Der Schalter legt fest, wer mitspielt. Wer an einem Abend fehlt, stellst du im Spiel unter „Anwesenheit“ ein. Neue Stammspieler kommen sofort in die laufende Runde; wer ausgeschaltet oder gelöscht wird, verlässt sie ohne Bierschuld.</p>
       <ul class="roster" id="roster"></ul>
-      <form class="add" id="addForm" autocomplete="off">
-        <label class="sr" for="nameInput">Name des neuen Mitspielers</label>
-        <input id="nameInput" name="name" type="text" maxlength="16" placeholder="Neuer Mitspieler" enterkeyhint="done">
-        <button type="submit" class="btn" id="addBtn">Hinzufügen</button>
-      </form>
+
+      <h2 class="section-title">Gäste</h2>
+      <p class="caption">Gäste kommen nur an Abenden aufs Rad, an denen sie da sind, und stehen in der Statistik. Ein Finale spielen nur Stammspieler.</p>
+      <ul class="roster" id="guestRoster"></ul>
+
       <div class="round-tools" id="roundTools" hidden>
-        <p>Eine Runde läuft. Kader-Änderungen gelten ab der nächsten Runde.</p>
+        <p>Eine Runde läuft. Wer schon gezogen wurde, bleibt in der Statistik.</p>
         <button type="button" class="btn ghost" id="abortBtn">Runde abbrechen</button>
       </div>
 
@@ -171,6 +184,11 @@
   <span class="sheet-label">Anwesenheit</span>
   <h2 class="presence-title" id="presenceTitle">Wer ist heute da?</h2>
   <ul class="presence-list" id="presenceList"></ul>
+  <form class="add presence-add" id="guestForm" autocomplete="off">
+    <label class="sr" for="guestInput">Name des Gastes</label>
+    <input id="guestInput" type="text" maxlength="16" placeholder="Neuer Gast" enterkeyhint="done">
+    <button type="submit" class="btn ghost" id="guestAdd">Gast dazu</button>
+  </form>
   <p class="presence-note" id="presenceNote"></p>
   <div class="sheet-actions">
     <button type="button" class="sheet-undo" id="presenceCancel">Abbrechen</button>
