@@ -97,7 +97,7 @@ export function createWheel(svg, { logoHref }) {
     }
     const seg = 360 / n;
     players.forEach((p, i) => {
-      const path = el("path", { d: segPath(i * seg, (i + 1) * seg), class: "wheel-seg", "data-id": p.id });
+      const path = el("path", { d: segPath(i * seg, (i + 1) * seg), class: "wheel-seg" + (p.absent ? " is-absent" : ""), "data-id": p.id });
       path.style.fill = p.color;
       rotor.append(path);
     });
@@ -109,7 +109,7 @@ export function createWheel(svg, { logoHref }) {
       const room = R * 0.6;
       if (p.name.length * fs * 0.5 > room) fs = Math.max(11, room / (p.name.length * 0.5));
       const t = el("text", {
-        x: x.toFixed(2), y: y.toFixed(2), class: "wheel-label",
+        x: x.toFixed(2), y: y.toFixed(2), class: "wheel-label" + (p.absent ? " is-absent" : ""),
         "text-anchor": "middle", "dominant-baseline": "central", "font-size": fs.toFixed(1),
         transform: `rotate(${rot.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)})`
       });

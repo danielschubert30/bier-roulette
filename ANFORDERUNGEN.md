@@ -11,8 +11,15 @@ Legende: `[x]` umgesetzt · `[ ]` offen
 - [x] **A3 Champion:** Der Sieger des Finales holt als Einziger kein Bier und wird „FCA Bier-Roulette Champion“. Der Titel bleibt sichtbar, bis es einen neuen Champion gibt.
 - [x] **A4 Neue Runde:** Danach startet eine neue Runde mit allen Anwesenden.
 - [x] **A5 Rückgängig:** Die letzte Ziehung lässt sich zurücknehmen (Fehltipp).
-- [x] **A6 Anwesenheit:** Pro Mitspieler ein Schalter „heute dabei“; maximal 8 auf dem Rad, bis zu 12 im Kader.
+- [x] **A6 Mitspieler:** Im Kader pro Mitspieler ein Schalter „spielt mit“; maximal 8 auf dem Rad, bis zu 12 im Kader.
 - [x] **A7 Faire Auslosung:** Jeder im Topf hat die gleiche Chance; angezeigt wird immer das Segment unter dem Zeiger.
+
+### Runden über mehrere Spieltage (beauftragt 07.11.2026)
+
+- [x] **A8 Anwesenheit pro Abend:** Vor dem ersten Dreh eines Abends fragt die App „Wer ist heute da?“. Änderbar jederzeit über „Anwesenheit“, auch mitten in der Runde. Ein Abend geht bis 6 Uhr früh.
+- [x] **A9 Mitlosen mit Bierschuld:** Wer fehlt, bleibt ausgegraut im Topf. Wird er gezogen, fliegt er raus und schuldet eine Runde; fürs aktuelle Bier wird sofort nachgedreht. Offene Schulden erscheinen beim nächsten Treffen als Hinweis und werden mit „Eingelöst“ abgehakt.
+- [x] **A10 Finale, wenn einer fehlt:** Wahl im Moment: „Nächstes Mal nachholen“ (Finale wird geparkt, für den Abend startet eine neue Runde) oder „verliert kampflos“ (Fehlender schuldet das letzte Bier, der andere wird Champion). Fehlen beide, wird nachgeholt.
+- [x] **A11 Offene Finals nachholen:** Geparkte Finals erscheinen als Hinweis; sind beide da, „Jetzt spielen“. Fehlt wieder einer, kann man dort kampflos werten.
 
 ## B – Inhalte
 
@@ -39,9 +46,12 @@ Legende: `[x]` umgesetzt · `[ ]` offen
 
 ## E – Statistik
 
-- [x] **E1 Pro Spieler:** Biere geholt, Champion-Titel, Finalteilnahmen; Zeitraum Heute / Gesamt.
-- [x] **E2 Ehrentafel:** alle Champions mit Datum, Finalgegner und Ergebnis.
+- [x] **E1 Pro Spieler:** wie oft dran, Champion-Titel, Finalteilnahmen; Zeitraum Heute / Saison / Gesamt.
+- [x] **E2 Ehrentafel:** alle Champions mit Datum, Finalgegner und Ergebnis (auch „kampflos“).
 - [x] **E3 Amtierender Champion** dauerhaft im Kopfbereich.
+- [x] **E4 Bier-Saldo pro Saison (Juli–Juni):** Die App merkt sich bei jedem Holen, wie viele Biere es waren (= Anwesende). Saldo = geholte Biere minus Saisonschnitt pro Runde mal Anzahl. Gleicht aus, dass man bei einer kleinen Runde weniger zahlt. Der Champion-Vorteil bleibt bestehen.
+- [x] **E5 Ausgleichsliste:** „X gibt Y n Bier aus“, auf ganze Biere gerundet, für die gewählte Saison.
+- [x] **E6 Offene Bierschulden** mit Datum und Grund, einlösbar auch in der Statistik.
 
 ## Ideen-Speicher (noch nicht beauftragt)
 

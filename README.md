@@ -10,6 +10,13 @@ Wer holt das nächste Bier? Das Glücksrad für unsere FCA-Runde im Stadion.
 2. iPhone: Teilen-Symbol, dann „Zum Home-Bildschirm“. Android: Menü, dann „App installieren“ oder „Zum Startbildschirm hinzufügen“.
 3. Ab jetzt startet die App wie jede andere, auch bei schlechtem Netz im Stadion.
 
+## Wenn jemand fehlt
+
+- Vor dem ersten Dreh eines Abends fragt die App, wer da ist.
+- Wer fehlt, bleibt im Topf. Wird er gezogen, fliegt er raus und schuldet eine Runde, die er beim nächsten Mal einlöst.
+- Fehlt ein Finalist, entscheidet ihr: Finale nachholen oder kampflos.
+- Der Bier-Saldo gleicht über die Saison aus, dass man bei kleinen Runden weniger Bier holen muss.
+
 Gespeichert wird vorerst auf dem Handy, auf dem gedreht wird.
 
 ## Für die Weiterentwicklung

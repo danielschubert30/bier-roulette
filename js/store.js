@@ -41,8 +41,11 @@ function emptyState() {
   return {
     version: 1,
     players: defaultPlayers(),
-    round: null,
-    rounds: [],
+    round: null,          // laufende Runde
+    rounds: [],           // abgeschlossene Runden (in Reihenfolge des Abschlusses)
+    pending: [],          // Runden mit verschobenem Finale
+    debts: [],            // Bierschulden von Fehlenden
+    presence: null,       // { day: "JJJJ-MM-TT", ids: [...] } – wer an diesem Abend da ist
     settings: { sound: true, vibrate: true }
   };
 }
@@ -59,9 +62,13 @@ function normRound(r) {
   const pot = (Array.isArray(r.pot) ? r.pot : []).map(normPlayer).filter(Boolean);
   if (pot.length < 2) return null;
   const potIds = new Set(pot.map((p) => p.id));
+  // Ziehung: absent = Spieler war nicht da (dann Bierschuld statt Holen), beers = Anzahl Biere beim Holen
   const picks = (Array.isArray(r.picks) ? r.picks : [])
     .filter((k) => k && potIds.has(k.id) && isFinite(k.at))
-    .map((k) => ({ id: k.id, at: Number(k.at) }));
+    .map((k) => ({
+      id: k.id, at: Number(k.at), absent: k.absent === true,
+      beers: posInt(k.beers), debtId: ID.test(String(k.debtId || "")) ? String(k.debtId) : null
+    }));
   let final = null;
   if (r.final && potIds.has(r.final.a) && potIds.has(r.final.b)) {
     const f = r.final;
@@ -73,10 +80,34 @@ function normRound(r) {
         .map((s) => ({ by: s.by, aim: s.aim, dive: s.dive, result: s.result, at: Number(s.at) || 0 })),
       winner: potIds.has(f.winner) ? f.winner : null,
       loser: potIds.has(f.loser) ? f.loser : null,
-      endedAt: Number(f.endedAt) || null
+      endedAt: Number(f.endedAt) || null,
+      forfeit: f.forfeit === true,          // kampflos entschieden (Verlierer fehlte)
+      postponed: f.postponed === true,      // auf ein späteres Treffen verschoben
+      beers: posInt(f.beers),               // Biere, die der Verlierer geholt hat
+      debtId: ID.test(String(f.debtId || "")) ? String(f.debtId) : null
     };
   }
   return { id: String(r.id), startedAt: Number(r.startedAt) || Date.now(), pot, picks, final };
+}
+
+function posInt(v) {
+  const n = Math.round(Number(v));
+  return isFinite(n) && n > 0 && n < 100 ? n : null;
+}
+
+// Bierschuld: Spieler wurde gezogen (oder verlor kampflos), war aber nicht da.
+// Eingelöst wird beim nächsten Treffen; dann zählt, wie viele Biere es waren.
+function normDebt(d) {
+  if (!d || !ID.test(String(d.id || "")) || !ID.test(String(d.playerId || "")) || !isFinite(d.at)) return null;
+  return {
+    id: String(d.id), playerId: String(d.playerId), at: Number(d.at),
+    roundId: ID.test(String(d.roundId || "")) ? String(d.roundId) : null,
+    reason: d.reason === "forfeit" ? "forfeit" : "pick",
+    name: cleanName(d.name) || "?",
+    color: HEX.test(d.color) ? d.color : PALETTE[0],
+    settledAt: Number(d.settledAt) || null,
+    beers: posInt(d.beers)
+  };
 }
 
 export function load() {
@@ -95,6 +126,11 @@ export function load() {
   for (const p of state.players) if (p.active && ++active > MAX_WHEEL) p.active = false;
   state.round = normRound(raw.round);
   state.rounds = (Array.isArray(raw.rounds) ? raw.rounds : []).map(normRound).filter((r) => r && r.final && r.final.winner);
+  state.pending = (Array.isArray(raw.pending) ? raw.pending : []).map(normRound).filter((r) => r && r.final && !r.final.winner);
+  state.debts = (Array.isArray(raw.debts) ? raw.debts : []).map(normDebt).filter(Boolean);
+  if (raw.presence && typeof raw.presence.day === "string" && Array.isArray(raw.presence.ids)) {
+    state.presence = { day: raw.presence.day, ids: raw.presence.ids.filter((id) => ID.test(String(id))).map(String) };
+  }
   if (raw.settings && typeof raw.settings === "object") {
     state.settings.sound = raw.settings.sound !== false;
     state.settings.vibrate = raw.settings.vibrate !== false;

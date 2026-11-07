@@ -24,6 +24,7 @@
   <symbol id="i-crown" viewBox="0 0 24 24"><path d="M3.5 17.5 2 7.5l5.2 4L12 4l4.8 7.5 5.2-4-1.5 10z" fill="currentColor"/><rect x="3.5" y="18.8" width="17" height="2.2" rx="1" fill="currentColor"/></symbol>
   <symbol id="i-wheel" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="2.6" fill="currentColor"/></symbol>
   <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V11M10 20V5M16 20v-7M22 20H2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7H4V2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.6 7.2A8 8 0 1 1 4 13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
   <symbol id="i-team" viewBox="0 0 24 24"><circle cx="8.5" cy="8" r="3.4" fill="currentColor"/><path d="M2 20c0-3.6 2.9-6.2 6.5-6.2S15 16.4 15 20z" fill="currentColor"/><circle cx="17" cy="9" r="2.8" fill="currentColor" opacity=".7"/><path d="M15.6 14.2c3.5-.6 6.4 1.8 6.4 5.8h-5.3" fill="currentColor" opacity=".7"/></symbol>
 </svg>
 
@@ -46,9 +47,13 @@
       <div class="round-head">
         <div class="round-line">
           <p class="round-title"><span id="roundNo">Runde 1</span><span class="round-state" id="roundState"></span></p>
-          <button type="button" class="link-btn" id="undoBtn" hidden>Rückgängig</button>
+          <div class="round-actions">
+            <button type="button" class="round-icon" id="undoBtn" hidden aria-label="Letzte Ziehung zurücknehmen" title="Rückgängig"><svg aria-hidden="true"><use href="#i-undo"/></svg></button>
+            <button type="button" class="pill-btn" id="presenceBtn">Anwesenheit</button>
+          </div>
         </div>
         <ul class="pot" id="pot" aria-label="Wer noch im Topf ist"></ul>
+        <div class="notices" id="notices"></div>
       </div>
 
       <div class="arena" id="arena">
@@ -59,7 +64,8 @@
         <div class="stage stage-final" id="stageFinal" hidden>
           <p class="kicker">Finale · Elfmeterschießen</p>
           <div class="score" id="score"></div>
-          <div class="goal-box"><svg id="goal" class="goal" viewBox="0 0 360 250" role="img" aria-label="Tor mit Torwart. Tippe links, Mitte oder rechts, um zu schießen."></svg></div>
+          <div class="decide" id="finalDecide" hidden></div>
+          <div class="goal-box" id="goalBox"><svg id="goal" class="goal" viewBox="0 0 360 250" role="img" aria-label="Tor mit Torwart. Tippe links, Mitte oder rechts, um zu schießen."></svg></div>
           <p class="final-call" id="finalCall" aria-live="polite"></p>
         </div>
 
@@ -89,11 +95,23 @@
       <div class="champ-card" id="champCard"></div>
       <div class="seg" role="group" aria-label="Zeitraum">
         <button type="button" id="rangeToday" aria-pressed="true" title="Seit 6 Uhr früh">Heute</button>
+        <button type="button" id="rangeSeason" aria-pressed="false" title="Juli bis Juni">Saison</button>
         <button type="button" id="rangeAll" aria-pressed="false">Gesamt</button>
       </div>
       <div class="kpis" id="kpis"></div>
       <div id="table"></div>
-      <p class="caption">Biere: wie oft jemand holen musste, verlorenes Finale eingerechnet. Titel: gewonnene Elfmeterschießen.</p>
+      <p class="caption">Geholt: wie oft jemand dran war, Bierschulden und verlorene Finals eingerechnet. Titel: gewonnene Finals.</p>
+
+      <div class="section-head">
+        <h2 class="section-title">Bier-Saldo</h2>
+        <label class="sr" for="seasonSel">Saison</label>
+        <select id="seasonSel" class="select"></select>
+      </div>
+      <div id="saldo"></div>
+
+      <h2 class="section-title">Offene Bierschulden</h2>
+      <div id="debts"></div>
+
       <h2 class="section-title">Ehrentafel</h2>
       <div id="honors"></div>
     </section>
@@ -102,6 +120,7 @@
     <section class="view view-page" id="view-squad" hidden aria-labelledby="squadTitle">
       <h1 class="page-title" id="squadTitle">Kader</h1>
       <p class="lede" id="squadNote"></p>
+      <p class="caption">Wer an einem Abend fehlt, stellst du im Spiel unter „Anwesenheit“ ein. Der Schalter hier legt fest, wer überhaupt mitspielt.</p>
       <ul class="roster" id="roster"></ul>
       <form class="add" id="addForm" autocomplete="off">
         <label class="sr" for="nameInput">Name des neuen Mitspielers</label>
@@ -139,13 +158,23 @@
 
 <div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
 <section class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetName">
-  <span class="sheet-label">Bierholer:</span>
+  <span class="sheet-label" id="sheetLabel">Bierholer:</span>
   <h2 class="sheet-name" id="sheetName"></h2>
   <p class="sheet-meta" id="sheetMeta"></p>
   <p class="sheet-quip" id="sheetQuip"></p>
   <div class="sheet-actions">
     <button type="button" class="sheet-undo" id="sheetUndo">Rückgängig</button>
     <button type="button" class="sheet-next" id="sheetNext">Weiter</button>
+  </div>
+</section>
+<section class="sheet sheet-plain" id="presenceSheet" hidden role="dialog" aria-modal="true" aria-labelledby="presenceTitle">
+  <span class="sheet-label">Anwesenheit</span>
+  <h2 class="presence-title" id="presenceTitle">Wer ist heute da?</h2>
+  <ul class="presence-list" id="presenceList"></ul>
+  <p class="presence-note" id="presenceNote"></p>
+  <div class="sheet-actions">
+    <button type="button" class="sheet-undo" id="presenceCancel">Abbrechen</button>
+    <button type="button" class="sheet-next" id="presenceOk">Übernehmen</button>
   </div>
 </section>
 <div class="toast" id="toast" hidden role="status"></div>

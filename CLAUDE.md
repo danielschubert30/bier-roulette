@@ -40,10 +40,20 @@
 
 ### Datenmodell (`js/store.js`)
 
-- `players`: `{id, name, color, active}` – Kader, max. 12, davon max. 8 aktiv.
-- `round`: laufende Runde – `pot` (Spieler beim Start, mit Name und Farbe), `picks` (Ziehungen in Reihenfolge), `final` (Elfmeterschießen mit `shots`, `winner`, `loser`).
-- `rounds`: abgeschlossene Runden in zeitlicher Reihenfolge. Champion = Sieger der letzten abgeschlossenen Runde.
+- `players`: `{id, name, color, active}` – Kader, max. 12; `active` = spielt mit (max. 8).
+- `presence`: `{day, ids}` – wer an diesem Abend da ist. Ein Abend geht bis 6 Uhr früh (`dayStart`). Ohne Eintrag für heute fragt die App vor dem ersten Dreh nach.
+- `round`: laufende Runde – `pot` (alle Mitspieler beim Start, auch Fehlende), `picks` (`{id, at, absent, beers, debtId}`), `final` (Elfmeterschießen mit `shots`, `winner`, `loser`, `forfeit`, `postponed`, `beers`, `debtId`).
+- `pending`: Runden mit verschobenem Finale (werden über Hinweise nachgeholt).
+- `rounds`: abgeschlossene Runden in Reihenfolge des Abschlusses. Champion = Sieger der zuletzt abgeschlossenen Runde.
+- `debts`: Bierschulden `{id, playerId, at, roundId, reason: pick|forfeit, name, color, settledAt, beers}`.
+- `beers` = Anzahl Anwesender (Mitspieler) im Moment des Holens. Daraus rechnet die Statistik den Bier-Saldo pro Saison (Juli–Juni): geholte Biere minus Saisonschnitt × Anzahl.
 - Kader-Änderungen gelten ab der nächsten Runde; die laufende Runde arbeitet mit ihrem `pot`.
+
+### Spielregeln bei Fehlenden
+
+- Wer fehlt, bleibt im Topf (Rad ausgegraut). Gezogen → raus, Bierschuld, sofort nachdrehen.
+- Finale mit Fehlendem: Auswahl „Nächstes Mal nachholen“ (→ `pending`, neue Runde startet) oder „kampflos“ (Fehlender verliert, Schuld).
+- Diese Regeln sind mit Daniel abgestimmt (07.11.2026); Änderungen nur nach Rücksprache.
 
 ## Lokal testen
 
