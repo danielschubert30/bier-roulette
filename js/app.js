@@ -1,11 +1,12 @@
 // FCA Bier-Roulette – Ablauf und Oberfläche.
-import { load, save, MAX_WHEEL, MAX_ON_WHEEL, MAX_ROSTER, MAX_COMPS, PALETTE, rand, uid, cleanName, cleanTitle, newCompetition } from "./store.js";
+import { load, save, hasSaved, normComp, MAX_WHEEL, MAX_ON_WHEEL, MAX_ROSTER, MAX_COMPS, PALETTE, rand, uid, cleanName, cleanTitle, newCompetition } from "./store.js";
+import * as SYNC from "./sync.js";
 import { createWheel, weightedIndex } from "./wheel.js";
 import * as TP from "./tipp.js";
 import * as SO from "./shootout.js";
 import { SPIN_QUIPS, RESULT_QUIPS, FINAL_INTROS, CHAMPION_QUIPS, SHOT_TEXT, FCA_FACTS, TEMPO_QUIPS } from "./content.js";
 
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.5.0";
 const NS = "http://www.w3.org/2000/svg";
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const $ = (id) => document.getElementById(id);
@@ -38,10 +39,33 @@ const els = {
   tippSheet: $("tippSheet"), tippLabel: $("tippLabel"), tippTitle: $("tippTitle"), tippNote: $("tippNote"),
   tippBody: $("tippBody"), tippActions: $("tippActions"),
   revealSheet: $("revealSheet"), revealLabel: $("revealLabel"), revealTitle: $("revealTitle"), revealSrc: $("revealSrc"),
-  revealBody: $("revealBody"), revealActions: $("revealActions")
+  revealBody: $("revealBody"), revealActions: $("revealActions"),
+  syncDot: $("syncDot"), storeNote: $("storeNote"), groupInfo: $("groupInfo"), groupActions: $("groupActions"),
+  joinForm: $("joinForm"), joinInput: $("joinInput"),
+  groupSheet: $("groupSheet"), groupTitle: $("groupTitle"), groupText: $("groupText"), groupLink: $("groupLink"),
+  groupSheetActions: $("groupSheetActions"), loading: $("loading"), loadingText: $("loadingText"), loadingBtn: $("loadingBtn")
 };
 
-const root = load();
+// Gemeinsame Runde? (Einladungslink mit ?g=… oder früher beigetreten). Sonst wie bisher nur auf diesem Handy.
+function localIsFresh() {
+  if (!hasSaved()) return true;
+  return load().competitions.every((c) => !c.rounds.length && !c.round && !c.pending.length && !c.debts.length);
+}
+const URL_CODE = SYNC.codeFromUrl();
+let GROUP = SYNC.savedGroup();
+let joinOffer = null;
+if (URL_CODE && URL_CODE !== GROUP) {
+  if (!GROUP && localIsFresh()) { SYNC.saveGroup(URL_CODE); GROUP = URL_CODE; }
+  else joinOffer = URL_CODE;
+}
+const STORE_KEY = GROUP ? SYNC.CACHE_KEY + GROUP : undefined;
+const root = load(STORE_KEY);
+if (GROUP && !hasSaved(STORE_KEY)) {
+  // Noch nichts von der Gruppe auf diesem Handy: Platzhalter anzeigen, bis der gemeinsame Stand da ist
+  root._placeholder = true;
+  root.competitions.forEach((c) => { c._ph = true; });
+  if (hasSaved()) root.settings = { ...load().settings };
+}
 let state = root.competitions.find((c) => c.id === root.activeId) || root.competitions[0];   // aktive Meisterschaft
 const ui = {
   tab: "game", range: "season", seasonStart: null, addAsGuest: false, renaming: null,
@@ -51,7 +75,12 @@ const ui = {
   armed: null, armTimer: null, newChamp: false, wheelSig: "", wheelIds: "", finalLine: null, lastQuip: -1,
   tipFor: null, tipDraft: null, tipDone: null,   // Tippspiel: wer gerade verdeckt tippt / zuletzt getippt hat
   reveals: [], revealing: null,   // Auflösungen, die noch angezeigt werden
-  lastManual: null                // letzte Auflösung per Knopf (für „Doch nicht“)
+  lastManual: null,               // letzte Auflösung per Knopf (für „Doch nicht“)
+  remoteQ: [], remoteBusy: false, // Änderungen anderer Handys, die gerade nachgespielt werden
+  hidePick: null,                 // Ziehung, die noch nicht verraten wird (Rad dreht noch)
+  roundsDirty: false,             // fertige Runden kamen während einer Animation an
+  sheetRemote: false,             // Ergebnis kam von einem anderen Handy
+  creating: false, sync: { online: false, pending: false, ready: false, denied: false }
 };
 
 const wheel = createWheel(els.wheel, { logoHref: "assets/fca-logo.png" });
@@ -142,11 +171,18 @@ function toast(msg) {
   toastTimer = setTimeout(() => { els.toast.hidden = true; }, 3400);
 }
 let saveWarned = false;
-function persist() {
-  if (!save(root) && !saveWarned) {
+// quiet: automatische Änderung (z. B. Gäste in den Topf), bei einem Zusammenstoß mit einem anderen Handy ohne Meldung
+function persist(quiet) {
+  if (root._placeholder) return;
+  if (!save(root, STORE_KEY) && !saveWarned) {
     saveWarned = true;
     toast("Speichern klappt in diesem Browser nicht. Privater Modus?");
   }
+  if (GROUP) SYNC.changed(state.id, !!quiet);
+}
+// Nur auf diesem Handy zwischenspeichern (Daten kamen von anderen Handys)
+function saveLocal() {
+  if (!root._placeholder) save(root, STORE_KEY);
 }
 
 /* ---------- Anwesenheit, Stammspieler und Gäste ---------- */
@@ -167,7 +203,7 @@ const guestSlots = () => Math.max(0, MAX_ON_WHEEL - activePlayers().length);
 
 /* ---------- Runden und Daten ---------- */
 function remaining(round) {
-  const out = new Set(round.picks.map((k) => k.id));
+  const out = new Set(round.picks.filter((k) => k !== ui.hidePick).map((k) => k.id));
   return round.pot.filter((p) => !out.has(p.id));
 }
 const remainingRegs = (r) => remaining(r).filter((p) => !p.guest);
@@ -192,7 +228,7 @@ function syncRoundMembers() {
       changed = true;
     }
   }
-  if (changed) persist();
+  if (changed) persist(true);
 }
 function joinRound(p) {
   const r = state.round;
@@ -221,11 +257,16 @@ function finalRound() {
   return r && r.final && !r.final.winner ? r : null;
 }
 function champRound() {
-  if (ui.champRoundId) return state.rounds.find((r) => r.id === ui.champRoundId) || null;
+  if (ui.champRoundId) {
+    return state.rounds.find((r) => r.id === ui.champRoundId) ||
+      (state.lastDone && state.lastDone.id === ui.champRoundId ? state.lastDone : null);
+  }
   const r = state.round;
   return r && r.final && r.final.winner ? r : null;
 }
 function viewMode() {
+  // Ein anderes Handy hat gedreht und gleich das Finale gestartet: erst das Rad zu Ende zeigen
+  if (ui.hidePick && state.round && state.round.final && !state.round.final.winner && !ui.playingId) return "spin";
   if (ui.champRoundId && champRound()) return "champ";
   if (ui.playingId && finalRound()) return "final";
   const r = state.round;
@@ -249,7 +290,7 @@ function allRoundsAll() {
 function infoOf(id, round) {
   const r = state.players.find((p) => p.id === id);
   if (r) return r;
-  const sources = [round, state.round, ...state.pending, ...state.rounds.slice().reverse()].filter(Boolean);
+  const sources = [round, state.round, ...state.pending, state.lastDone, ...state.rounds.slice().reverse()].filter(Boolean);
   for (const src of sources) {
     const p = src.pot.find((x) => x.id === id);
     if (p) return p;
@@ -486,20 +527,41 @@ function finishChamp() {
 }
 
 async function spin() {
-  if (!els.revealSheet.hidden || !els.tippSheet.hidden) return;
+  if (!els.revealSheet.hidden || !els.tippSheet.hidden || ui.remoteBusy || ui.spinning) return;
   const r = state.round;
   syncWheel(false);
   ui.spinning = true;
   const line = tempoLine();
+  // Ergebnis zuerst festlegen und (in der Gruppe) hochladen; so dreht nie jemand gleichzeitig mit
+  const idx = weightedIndex(wheel.weights, rand());   // Chance = Feldgröße (Tippspiel), sonst für alle gleich
+  const p = wheel.players[idx];
+  const absent = !isPresent(p.id);
+  const rec = { id: p.id, at: Date.now(), absent, beers: absent ? null : presentCount(), debtId: null };
+  if (absent) rec.debtId = newDebt(p, r.id, "pick", rec.at).id;
+  r.picks.push(rec);
+  ui.hidePick = rec;
+  persist();
+  renderChrome();
+  if (GROUP) {
+    setTicker("Moment", "Das Rad wird für alle angeworfen …");
+    const res = await SYNC.commitNow(state.id, 5000);
+    if (res === "conflict") {
+      ui.spinning = false;
+      ui.hidePick = null;
+      toast("Ein anderes Handy hat gerade gedreht.");
+      renderAll(true);
+      drainRemote();
+      return;
+    }
+    // ohne Netz: Der Dreh zählt hier und wird nachgetragen, sobald wieder Netz da ist
+  }
   setTicker(line.label, line.text);
   const swap = reduceMotion ? null : setTimeout(() => {
     if (!ui.spinning) return;
     const l = spinLine();
     setTicker(l.label, l.text);
   }, 2900);
-  renderChrome();
   renderNotices();
-  const idx = weightedIndex(wheel.weights, rand());   // Chance = Feldgröße (Tippspiel), sonst für alle gleich
   const landed = await wheel.spinTo(idx, {
     rnd: rand,
     duration: reduceMotion ? 1100 : 5200 + rand() * 900,
@@ -508,13 +570,9 @@ async function spin() {
     reduceMotion
   });
   clearTimeout(swap);
-  const p = wheel.players[landed];
-  const absent = !isPresent(p.id);
-  const rec = { id: p.id, at: Date.now(), absent, beers: absent ? null : presentCount(), debtId: null };
-  if (absent) rec.debtId = newDebt(p, r.id, "pick", rec.at).id;
-  r.picks.push(rec);
-  persist();
+  if (landed !== idx) console.warn("Rad: Zeiger und Ergebnis weichen ab", landed, idx);
   ui.spinning = false;
+  ui.hidePick = null;
   wheel.highlight(p.id);
   if (absent) { groan(); buzz(80); }
   else {
@@ -525,6 +583,7 @@ async function spin() {
   openSheet(p, absent);
   renderChrome();
   renderNotices();
+  drainRemote();
 }
 
 function resultTexts(p) {
@@ -580,9 +639,10 @@ function resultTexts(p) {
   return { meta, quip };
 }
 
-function openSheet(p, absent) {
+function openSheet(p, absent, remote) {
   ui.sheetFor = p.id;
   ui.sheetDebt = absent;
+  ui.sheetRemote = !!remote;
   const lastTwo = finalDue(state.round);
   els.sheet.classList.toggle("is-debt", absent);
   els.sheet.style.setProperty("--c", p.color);
@@ -590,8 +650,8 @@ function openSheet(p, absent) {
   if (absent) {
     els.sheetLabel.textContent = "Bierschuld:";
     els.sheetMeta.textContent = "fehlt heute · fliegt raus und schuldet eine Runde";
-    els.sheetQuip.textContent = lastTwo ? "Damit steht das Finale fest." : "Fürs aktuelle Bier wird gleich nachgedreht.";
-    els.sheetNext.textContent = lastTwo ? "Weiter zum Finale" : "Nachdrehen";
+    els.sheetQuip.textContent = lastTwo ? "Damit steht das Finale fest." : remote ? "Fürs aktuelle Bier wird gleich nachgedreht." : "Fürs aktuelle Bier wird gleich nachgedreht.";
+    els.sheetNext.textContent = lastTwo ? "Weiter zum Finale" : remote ? "Weiter" : "Nachdrehen";
   } else {
     const { meta, quip } = resultTexts(p);
     els.sheetLabel.textContent = "Bierholer:";
@@ -609,17 +669,18 @@ function closeSheet() {
   syncBackdrop();
   ui.sheetFor = null;
   ui.sheetDebt = false;
+  ui.sheetRemote = false;
 }
 function sheetNext() {
   if (!ui.sheetFor) return;
   unlockAudio();
-  const respin = ui.sheetDebt;
+  const respin = ui.sheetDebt && !ui.sheetRemote;   // nachgedreht wird nur auf dem Handy, das gedreht hat
   closeSheet();
   wheel.highlight(null);
   const r = state.round;
   if (r && finalDue(r)) {
     startFinal();
-    persist();
+    persist(true);
     renderAll(true);
     return;
   }
@@ -672,6 +733,7 @@ function decideFinal(r, winnerId, forfeit) {
     ui.champRoundId = r.id;
   }
   if (!state.rounds.some((x) => x.id === r.id)) state.rounds.push(clone(r));
+  state.lastDone = clone(r);
   ui.newChamp = true;
   persist();
 }
@@ -785,7 +847,7 @@ function showShotText(txt) {
 }
 async function shoot(aim) {
   const r = finalRound();
-  if (!r || ui.shooting || finalNeedsDecision(r)) return;
+  if (!r || ui.shooting || ui.remoteBusy || finalNeedsDecision(r)) return;
   const f = r.final;
   unlockAudio();
   keepAwake();
@@ -794,16 +856,33 @@ async function shoot(aim) {
   renderNotices();
   const by = SO.nextShooter(f);
   const res = SO.resolveShot(aim, rand);
-  els.finalCall.textContent = `${infoOf(by, r).name} läuft an …`;
-  await animateShot(res);
-  f.shots.push({ by, aim: res.aim, dive: res.dive, result: res.result, at: Date.now() });
-  showShotText(pick(SHOT_TEXT[res.result]));
-  if (res.result === "goal") { cheer(); buzz(60); } else groan();
-
+  const shot = { by, aim: res.aim, dive: res.dive, result: res.result, at: Date.now() };
+  f.shots.push(shot);
   const w = SO.decide(f);
+  if (w) decideFinal(r, w, false);
+  else persist();
+  els.finalCall.textContent = `${infoOf(by, r).name} läuft an …`;
+  if (GROUP) {
+    const c = await SYNC.commitNow(state.id, 5000);
+    if (c === "conflict") {
+      ui.shooting = false;
+      toast("Ein anderes Handy hat gerade geschossen.");
+      renderAll(true);
+      drainRemote();
+      return;
+    }
+  }
+  await playShot(r, shot, w);
+  drainRemote();
+}
+// Schuss zeigen (eigener oder von einem anderen Handy); der Stand enthält ihn schon
+async function playShot(r, shot, w) {
+  const f = r.final;
+  await animateShot(shot);
+  showShotText(pick(SHOT_TEXT[shot.result]));
+  if (shot.result === "goal") { cheer(); buzz(60); } else groan();
   const a = infoOf(f.a, r).name, b = infoOf(f.b, r).name;
   if (w) {
-    decideFinal(r, w, false);
     renderFinalScore(r);
     els.finalCall.textContent = `${infoOf(w, r).name} gewinnt ${SO.scoreLine(f)}.`;
     await wait(reduceMotion ? 600 : 1700);
@@ -814,7 +893,6 @@ async function shoot(aim) {
     renderAll(true);
     return;
   }
-  persist();
   const both = SO.taken(f, f.a) >= SO.KICKS && SO.taken(f, f.b) >= SO.KICKS;
   ui.finalLine = { label: both ? "Sudden Death" : "Elfmeterschießen", text: `${a} ${SO.goals(f, f.a)} : ${SO.goals(f, f.b)} ${b}` };
   setTicker(ui.finalLine.label, ui.finalLine.text);
@@ -866,7 +944,7 @@ function renderChrome() {
 
   let stateText = "";
   if (mode === "idle") stateText = `${activePlayers().length + presentGuests().length} im Topf`;
-  else if (mode === "spin") stateText = isGuestRound(r) ? "Gastrunde" : `Bier Nr. ${r.picks.filter((k) => !k.absent).length + 1}`;
+  else if (mode === "spin") stateText = isGuestRound(r) ? "Gastrunde" : `Bier Nr. ${r.picks.filter((k) => !k.absent && k !== ui.hidePick).length + 1}`;
   else if (mode === "final") stateText = "Finale";
   else stateText = "Entschieden";
   els.roundState.textContent = stateText;
@@ -876,7 +954,7 @@ function renderChrome() {
     for (const p of activePlayers()) els.pot.append(chip(p, isPresent(p.id) ? "" : "is-absent", null, isPresent(p.id) ? null : "fehlt"));
     for (const p of presentGuests()) els.pot.append(chip(p, "", null, "Gast"));
   } else if (r) {
-    const order = new Map(r.picks.map((k, i) => [k.id, { no: i + 1, debt: k.absent }]));
+    const order = new Map(r.picks.filter((k) => k !== ui.hidePick).map((k, i) => [k.id, { no: i + 1, debt: k.absent }]));
     if (r.final && r.final.loser) order.set(r.final.loser, { no: r.picks.length + 1, debt: r.final.forfeit });
     for (const p of r.pot) {
       const out = order.get(p.id);
@@ -1056,9 +1134,9 @@ function renderGame(animate) {
   ensureTipGame();
   syncRoundMembers();
   let mode = viewMode();
-  if (mode === "spin" && finalDue(state.round) && !ui.sheetFor && !ui.spinning) {
+  if (mode === "spin" && finalDue(state.round) && !ui.sheetFor && !ui.spinning && !ui.remoteBusy) {
     startFinal();
-    persist();
+    persist(true);
     mode = "final";
   }
   els.stageWheel.hidden = !(mode === "idle" || mode === "spin");
@@ -1470,6 +1548,7 @@ function renderSquad() {
     ? "Rückgängig, Löschen, Runde abbrechen, Kampflos und Zurücksetzen nur mit PIN. Nach der Eingabe bleibt es eine Minute frei."
     : "Noch keine PIN. Jeder am Handy darf rückgängig machen, löschen und zurücksetzen.";
   els.adminSet.textContent = hasAdmin() ? "Ändern" : "Festlegen";
+  renderGroup();
   els.adminRemove.hidden = !hasAdmin();
   els.soundToggle.checked = root.settings.sound;
   els.vibeToggle.checked = root.settings.vibrate;
@@ -1560,7 +1639,7 @@ function removePlayer(id) {
 
 /* ---------- Fenster ---------- */
 function syncBackdrop() {
-  els.sheetBackdrop.hidden = ![els.sheet, els.presenceSheet, els.compSheet, els.pinSheet, els.tippSheet, els.revealSheet].some((x) => !x.hidden);
+  els.sheetBackdrop.hidden = ![els.sheet, els.presenceSheet, els.compSheet, els.pinSheet, els.tippSheet, els.revealSheet, els.groupSheet].some((x) => !x.hidden);
 }
 
 /* ---------- Biertempo ---------- */
@@ -1742,6 +1821,7 @@ async function submitPin() {
     root.admin = { salt, hash: await hashPin(pin, salt) };
     adminUntil = Date.now() + ADMIN_WINDOW;
     persist();
+    if (GROUP) SYNC.setAdmin(root.admin);
     closePin();
     toast("Admin-PIN gespeichert.");
     renderSquad();
@@ -1891,6 +1971,7 @@ function deleteComp(id) {
   const c = root.competitions.find((x) => x.id === id);
   if (!c || root.competitions.length < 2) return;
   root.competitions = root.competitions.filter((x) => x.id !== id);
+  if (GROUP) SYNC.removeComp(id);
   if (state.id === id) {
     resetUi();
     state = root.competitions[0];
@@ -1920,7 +2001,7 @@ function ensureTipGame() {
   }
   state.tipp = TP.newGame(day);
   ui.reveals = [];
-  persist();
+  persist(true);
   return state.tipp;
 }
 function weightFor(id) {
@@ -2349,7 +2430,7 @@ async function getJson(path) {
 // Fragt höchstens einmal pro Minute ab: das heutige FCA-Spiel suchen, ab Anpfiff den Stand holen
 async function pollLive(force) {
   const g = tipGame();
-  if (!g || LIVE.busy || document.visibilityState !== "visible") return;
+  if (!g || LIVE.busy || root._placeholder || document.visibilityState !== "visible") return;
   const now = Date.now();
   const m = g.match;
   const needSearch = !m || (!m.id && (!m.searched || now - m.searched > 15 * 60000));
@@ -2358,6 +2439,7 @@ async function pollLive(force) {
   if (now - LIVE.last < (force ? 15000 : 55000)) return;
   LIVE.busy = true;
   LIVE.last = now;
+  const before = JSON.stringify([g.match, g.results, g.liveSays, g.locked]);
   try {
     if (needSearch) {
       let found = null;
@@ -2382,10 +2464,10 @@ async function pollLive(force) {
     LIVE.failed = true;
   } finally {
     LIVE.busy = false;
-    persist();
+    if (JSON.stringify([g.match, g.results, g.liveSays, g.locked]) !== before) persist(true);
     if (tipGame() === g) {
       renderTipBar();
-      renderChrome();
+      if (!ui.spinning && !ui.shooting) renderChrome();
       if (!els.tippSheet.hidden && !ui.tipFor) renderTipp();
       maybeReveal();
     }
@@ -2405,6 +2487,353 @@ setInterval(() => {
   if (!ui.spinning && !ui.shooting) renderChrome();
   maybeReveal();
 }, 20000);
+
+/* ---------- Gemeinsam spielen: Änderungen anderer Handys ---------- */
+function assignShared(c, shared) {
+  const seen = c.tipp && shared.tipp && c.tipp.day === shared.tipp.day ? c.tipp.seen || {} : {};
+  for (const k of SYNC.SHARED) c[k] = shared[k] == null ? null : clone(shared[k]);
+  if (!Array.isArray(c.players)) c.players = [];
+  if (!Array.isArray(c.pending)) c.pending = [];
+  if (!Array.isArray(c.debts)) c.debts = [];
+  if (c.tipp) c.tipp.seen = seen;
+}
+// Was ist auf dem anderen Handy passiert? Ein neuer Dreh, ein neuer Schuss oder ein neuer Champion.
+function remoteEvents(old, neu) {
+  const ev = {};
+  const or = old.round, nr = neu.round;
+  // Neuer Dreh: in derselben Runde eine Ziehung mehr, oder eine neue Runde mit der ersten Ziehung
+  if (nr && (!nr.final || (!nr.final.shots.length && !nr.final.winner)) && nr.picks.length) {
+    const prev = or && or.id === nr.id ? (or.final ? -1 : or.picks.length) : 0;
+    if (nr.picks.length === prev + 1) ev.pick = nr.picks[nr.picks.length - 1];
+  }
+  // Neuer Schuss: im laufenden oder nachgeholten Finale ein Schuss mehr (auch der erste, wenn das Finale gerade erst begann)
+  const finals = (st) => [st.round, ...(st.pending || [])].filter((r) => r && r.final);
+  const oldF = finals(old);
+  const cands = finals(neu).concat(neu.lastDone ? [neu.lastDone] : []);
+  const best = (id) => cands.filter((x) => x.id === id).sort((a, b) => b.final.shots.length - a.final.shots.length)[0];
+  const ids = oldF.map((r) => r.id).concat(or && !or.final ? [or.id] : []);
+  for (const id of ids) {
+    const o = oldF.find((r) => r.id === id);
+    const n = best(id);
+    if (!n) continue;
+    const pending = (old.pending || []).some((x) => x.id === id);
+    if (n.final.shots.length === (o ? o.final.shots.length : 0) + 1) {
+      ev.shot = { roundId: id, shot: n.final.shots[n.final.shots.length - 1], winner: n.final.winner, pending };
+      break;
+    }
+    if (o && n.final.winner && !o.final.winner) ev.champ = { roundId: id, pending };
+  }
+  return ev;
+}
+function hookRemote(cid, shared, info) {
+  let c = root.competitions.find((x) => x.id === cid);
+  if (!c) {
+    c = normComp({ ...shared, id: cid, rounds: [], tippArchive: [] }, shared.name || "Meisterschaft", !!shared.fca);
+    root.competitions.push(c);
+    root.competitions.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    saveLocal();
+    if (!els.compSheet.hidden) renderCompList();
+    return;
+  }
+  // Eigene Änderung verworfen: zurück auf den gemeinsamen Ausgangsstand, dann den fremden Stand nachspielen
+  if (info.dropped && info.base && c === state) assignShared(c, info.base);
+  ui.remoteQ = ui.remoteQ.filter((x) => x.c !== c);
+  ui.remoteQ.push({ c, shared, info });
+  drainRemote();
+}
+async function drainRemote() {
+  if (ui.remoteBusy || ui.spinning || ui.shooting) return;
+  const item = ui.remoteQ.shift();
+  if (!item) {
+    // Fertige Runden kamen während einer Animation an: jetzt anzeigen
+    if (ui.roundsDirty) {
+      ui.roundsDirty = false;
+      renderChrome();
+      if (ui.tab === "stats") renderStats();
+    }
+    return;
+  }
+  ui.remoteBusy = true;
+  try {
+    await applyRemote(item);
+  } catch (e) {
+    console.error(e);
+    assignShared(item.c, item.shared);
+    renderAll(false);
+  } finally {
+    ui.remoteBusy = false;
+    saveLocal();
+  }
+  drainRemote();
+}
+const otherSheetOpen = () => [els.presenceSheet, els.compSheet, els.pinSheet, els.tippSheet, els.revealSheet, els.groupSheet].some((x) => !x.hidden);
+async function applyRemote({ c, shared, info }) {
+  if (c !== state) {
+    assignShared(c, shared);
+    if (!els.compSheet.hidden) renderCompList();
+    return;
+  }
+  const ev = remoteEvents({ round: state.round, pending: state.pending }, shared);
+  const watching = ui.tab === "game" && document.visibilityState === "visible" && !otherSheetOpen();
+  if (ev.pick && watching) {
+    await remoteSpin(ev.pick, shared);
+  } else if (ev.shot && watching) {
+    await remoteShot(ev, shared);
+  } else {
+    assignShared(state, shared);
+    if (ev.shot && ev.shot.winner) ev.champ = { roundId: ev.shot.roundId, pending: ev.shot.pending };
+    if (ev.champ) {
+      if (ev.champ.pending) { ui.playingId = null; ui.champRoundId = ev.champ.roundId; }
+      ui.newChamp = true;
+      champFanfare();
+    }
+    renderAll(false);
+    if (ev.pick && !otherSheetOpen() && !ui.sheetFor) showRemotePick(ev.pick);
+  }
+  if (info.dropped && !info.quiet) toast("Ein anderes Handy war schneller. Der Stand ist wieder aktuell.");
+}
+async function remoteSpin(pick, shared) {
+  if (ui.sheetFor) closeSheet();
+  wheel.highlight(null);
+  const line = tempoLine();   // Takt vor diesem Bier
+  ui.playingId = null;
+  ui.champRoundId = null;
+  assignShared(state, shared);
+  // Rad und Namen zeigen den Stand vor dem Dreh, bis das Rad steht
+  ui.hidePick = state.round.picks[state.round.picks.length - 1];
+  ui.spinning = true;
+  ui.wheelSig = "";
+  renderGame(false);
+  const idx = wheel.players.findIndex((p) => p.id === pick.id);
+  if (idx >= 0 && !els.stageWheel.hidden) {
+    setTicker(line.label, line.text);
+    await wheel.spinTo(idx, {
+      rnd: rand,
+      duration: reduceMotion ? 900 : 4300 + rand() * 600,
+      turns: reduceMotion ? 1 : 5,
+      onTick: tick,
+      reduceMotion
+    });
+  }
+  ui.spinning = false;
+  ui.hidePick = null;
+  showRemotePick(pick);
+}
+function showRemotePick(pick) {
+  const p = infoOf(pick.id, state.round);
+  wheel.highlight(p.id);
+  if (pick.absent) { groan(); buzz(80); }
+  else {
+    if (!reduceMotion) wheel.celebrate(p.color);
+    sting();
+    buzz([40, 40, 110]);
+  }
+  openSheet(p, pick.absent, true);
+  renderChrome();
+  renderNotices();
+}
+async function remoteShot(ev, shared) {
+  if (ui.sheetFor) closeSheet();
+  assignShared(state, shared);
+  const r = [state.round, ...state.pending, state.lastDone]
+    .filter((x) => x && x.id === ev.roundId && x.final && x.final.shots.length)
+    .sort((a, b) => b.final.shots.length - a.final.shots.length)[0];
+  if (!r) { renderAll(false); return; }
+  const f = r.final;
+  // Tor mit dem Stand vor diesem Schuss zeigen
+  const prev = { ...r, final: { ...f, shots: f.shots.slice(0, -1), winner: null, loser: null } };
+  ui.shooting = true;
+  ui.champRoundId = null;
+  if (ev.pending) ui.playingId = ev.roundId;
+  els.stageWheel.hidden = true;
+  els.stageChamp.hidden = true;
+  els.stageFinal.hidden = false;
+  els.ctaZone.hidden = true;
+  els.finalDecide.hidden = true;
+  els.goalBox.hidden = false;
+  els.finalCall.hidden = false;
+  if (!goalBuilt) buildGoal();
+  els.goal.classList.remove("is-ready");
+  renderFinalScore(prev);
+  els.finalCall.textContent = `${infoOf(ev.shot.by, r).name} läuft an …`;
+  if (ev.winner) {
+    if (ev.pending) { ui.playingId = null; ui.champRoundId = ev.roundId; }
+    ui.newChamp = true;
+  }
+  await playShot(r, ev.shot, ev.winner);
+}
+
+/* ---------- Gemeinsam spielen: Verbindung und Einstellungen ---------- */
+function hookRemoved(cid) {
+  const c = root.competitions.find((x) => x.id === cid);
+  if (!c) return;
+  root.competitions = root.competitions.filter((x) => x.id !== cid);
+  if (!root.competitions.length) {
+    const n = newCompetition("FCA-Spieltage", true, null);
+    root.competitions.push(n);
+  }
+  if (state.id === cid) {
+    resetUi();
+    state = root.competitions[0];
+    root.activeId = state.id;
+    toast(`„${c.name}“ wurde auf einem anderen Handy gelöscht.`);
+  }
+  saveLocal();
+  if (!els.compSheet.hidden) renderCompList();
+  renderAll(false);
+}
+function hookRounds(cid, rounds) {
+  const c = root.competitions.find((x) => x.id === cid);
+  if (!c) return;
+  c.rounds = rounds;
+  saveLocal();
+  if (c !== state) return;
+  if (ui.spinning || ui.shooting || ui.remoteBusy) { ui.roundsDirty = true; return; }
+  renderChrome();
+  if (ui.tab === "stats") renderStats();
+}
+function hookGroup(g) {
+  root.admin = g.admin;
+  saveLocal();
+  if (ui.tab === "squad") renderSquad();
+}
+function hookStatus(st) {
+  ui.sync = st;
+  renderSyncDot();
+  if (ui.tab === "squad" && !ui.armed) renderGroup();
+}
+function hookReady() {
+  if (!root._placeholder) return;
+  root.competitions = root.competitions.filter((c) => !c._ph);
+  delete root._placeholder;
+  if (!root.competitions.length) root.competitions.push(newCompetition("FCA-Spieltage", true, null));
+  state = root.competitions.find((c) => c.id === root.activeId) || root.competitions[0];
+  root.activeId = state.id;
+  resetUi();
+  els.loading.hidden = true;
+  saveLocal();
+  renderAll(true);
+  pollLive(true);
+}
+function hookGroupMissing() {
+  if (!root._placeholder) { toast("Diese gemeinsame Runde gibt es auf dem Server nicht mehr."); return; }
+  els.loadingText.textContent = "Diese gemeinsame Runde gibt es nicht. Ist der Link vollständig?";
+  els.loadingBtn.hidden = false;
+}
+function renderSyncDot() {
+  const d = els.syncDot;
+  d.hidden = !GROUP;
+  if (!GROUP) return;
+  const st = ui.sync;
+  const cls = st.denied ? "is-off" : !st.online ? "is-off" : st.pending ? "is-wait" : "is-ok";
+  const label = st.denied ? "Kein Zugriff auf den gemeinsamen Stand" : !st.online ? "Offline: Änderungen werden nachgetragen" : st.pending ? "Wird hochgeladen" : "Gemeinsamer Stand ist aktuell";
+  d.className = "sync-dot " + cls;
+  d.title = label;
+  d.setAttribute("aria-label", label);
+  els.storeNote.textContent = "Gemeinsamer Stand, auf diesem Handy zwischengespeichert";
+}
+function renderGroup() {
+  els.groupActions.replaceChildren();
+  if (!GROUP) {
+    els.groupInfo.textContent = "Gerade nur auf diesem Handy. Starte eine gemeinsame Runde: Dein Stand wird hochgeladen, und alle mit dem Link sehen live dasselbe und können mitdrehen.";
+    els.groupActions.append(btn("btn", ui.creating ? "Lade hoch …" : "Gemeinsam starten", startGroup, ui.creating));
+    els.joinForm.hidden = false;
+    return;
+  }
+  const st = ui.sync;
+  els.groupInfo.textContent = (st.denied ? "Kein Zugriff auf den gemeinsamen Stand. "
+    : !st.online ? "Gerade offline. Was du änderst, wird nachgetragen, sobald wieder Netz da ist. "
+    : st.pending ? "Wird hochgeladen … " : "Verbunden. ") + "Alle mit dem Link sehen denselben Stand und können mitdrehen.";
+  els.groupActions.append(btn("btn", "Link teilen", shareInvite));
+  const armed = ui.armed === "leave";
+  els.groupActions.append(btn("btn ghost" + (armed ? " is-armed" : ""), armed ? "Wirklich verlassen?" : "Verlassen", () => {
+    if (ui.armed !== "leave") { arm("leave"); renderSquad(); return; }
+    disarm();
+    leaveGroup();
+  }));
+  els.joinForm.hidden = true;
+}
+async function startGroup() {
+  if (ui.creating || busyNow()) return;
+  if (navigator.onLine === false) { toast("Dafür braucht das Handy kurz Internet."); return; }
+  ui.creating = true;
+  renderGroup();
+  try {
+    const code = await SYNC.createGroup(root);
+    save(root, SYNC.CACHE_KEY + code);
+    SYNC.saveGroup(code);
+    try { sessionStorage.setItem("fca-invite", "1"); } catch (e) { /* egal */ }
+    location.replace(SYNC.inviteUrl(code));
+  } catch (e) {
+    console.error(e);
+    ui.creating = false;
+    renderGroup();
+    toast("Hochladen hat nicht geklappt. Ist das Handy online?");
+  }
+}
+async function shareInvite() {
+  const url = SYNC.inviteUrl(GROUP);
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: "FCA Bier-Roulette", text: "Unser Bier-Roulette: Link öffnen, dann siehst du live mit und kannst mitdrehen. Wer die App schon auf dem Home-Bildschirm hat: Link in der App unter Kader, Gemeinsam spielen einfügen.", url });
+      return;
+    } catch (e) {
+      if (e && e.name === "AbortError") return;
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    toast("Link kopiert. Jetzt in die Gruppe schicken.");
+  } catch (e) {
+    openGroupSheet("invite");
+  }
+}
+function leaveGroup() {
+  SYNC.forgetGroup();
+  location.replace(location.pathname);
+}
+function openGroupSheet(kind, code) {
+  if (busyNow()) return;
+  const acts = els.groupSheetActions;
+  acts.replaceChildren();
+  els.groupLink.hidden = true;
+  if (kind === "invite") {
+    els.groupTitle.textContent = "Läuft gemeinsam";
+    els.groupText.textContent = "Dein Stand ist hochgeladen. Schick jetzt den Link an die anderen: Wer ihn öffnet, sieht live mit und kann mitdrehen. Tipp: Danach die App neu zum Home-Bildschirm hinzufügen.";
+    els.groupLink.hidden = false;
+    els.groupLink.textContent = SYNC.inviteUrl(GROUP);
+    acts.append(btn("sheet-undo", "Fertig", closeGroupSheet), btn("sheet-next", "Link teilen", shareInvite));
+  } else {
+    els.groupTitle.textContent = "Mitspielen?";
+    els.groupText.textContent = "Ab jetzt siehst du denselben Stand wie alle anderen und kannst mitdrehen. Dein bisheriger Stand auf diesem Handy bleibt gespeichert und kommt zurück, wenn du die gemeinsame Runde verlässt.";
+    acts.append(btn("sheet-undo", "Abbrechen", closeGroupSheet), btn("sheet-next", "Mitspielen", () => doJoin(code)));
+  }
+  els.groupSheet.hidden = false;
+  els.sheetBackdrop.hidden = false;
+}
+function closeGroupSheet() {
+  els.groupSheet.hidden = true;
+  syncBackdrop();
+  renderAll(false);
+}
+async function doJoin(code) {
+  if (navigator.onLine === false) { toast("Zum Beitreten braucht das Handy kurz Internet."); return; }
+  const b = els.groupSheetActions.querySelector(".sheet-next");
+  if (b) { b.disabled = true; b.textContent = "Prüfe …"; }
+  try {
+    if (!(await SYNC.groupExists(code))) {
+      toast("Diese gemeinsame Runde gibt es nicht. Ist der Link vollständig?");
+      if (b) { b.disabled = false; b.textContent = "Mitspielen"; }
+      return;
+    }
+  } catch (e) {
+    toast("Gerade keine Verbindung. Bitte gleich nochmal.");
+    if (b) { b.disabled = false; b.textContent = "Mitspielen"; }
+    return;
+  }
+  SYNC.saveGroup(code);
+  location.replace(SYNC.inviteUrl(code));
+}
 
 /* ---------- Bereiche ---------- */
 const views = { game: $("view-game"), stats: $("view-stats"), squad: $("view-squad") };
@@ -2437,6 +2866,7 @@ els.sheetNext.addEventListener("click", sheetNext);
 els.sheetUndo.addEventListener("click", () => requireAdmin("Rückgängig", undoLast));
 function closeTopSheet() {
   if (!els.pinSheet.hidden) closePin();
+  else if (!els.groupSheet.hidden) closeGroupSheet();
   else if (!els.revealSheet.hidden) closeReveal();
   else if (!els.tippSheet.hidden) {
     if (ui.tipFor) { ui.tipFor = null; ui.tipDraft = null; renderTipp(); }
@@ -2461,6 +2891,7 @@ els.adminRemove.addEventListener("click", () => requireAdmin("PIN entfernen", ()
   root.admin = null;
   adminUntil = 0;
   persist();
+  if (GROUP) SYNC.setAdmin(null);
   toast("Admin-PIN entfernt. Alle dürfen wieder alles.");
   renderSquad();
 }));
@@ -2470,6 +2901,13 @@ document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () 
 }));
 els.champPill.addEventListener("click", () => { if (!ui.spinning && !ui.shooting) switchTab("stats"); });
 els.tippBar.addEventListener("click", openTipp);
+els.joinForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const c = SYNC.codeFromText(els.joinInput.value);
+  if (!c) { toast("Das ist kein gültiger Einladungslink."); return; }
+  openGroupSheet("join", c);
+});
+els.loadingBtn.addEventListener("click", leaveGroup);
 els.rangeToday.addEventListener("click", () => { ui.range = "today"; renderStats(); });
 els.rangeSeason.addEventListener("click", () => { ui.range = "season"; renderStats(); });
 els.rangeAll.addEventListener("click", () => { ui.range = "all"; renderStats(); });
@@ -2503,7 +2941,9 @@ els.resetBtn.addEventListener("click", () => {
   requireAdmin("Statistik zurücksetzen", resetStats);
 });
 function resetStats() {
+  if (GROUP) SYNC.clearHistory(state.id);
   state.rounds = [];
+  state.lastDone = null;
   state.round = null;
   state.pending = [];
   state.debts = [];
@@ -2528,13 +2968,30 @@ els.vibeToggle.addEventListener("change", () => {
 
 /* ---------- Start ---------- */
 els.version.textContent = APP_VERSION;
-persist(); // ältere Speicherstände gleich im neuen Format sichern
+persist(true); // ältere Speicherstände gleich im neuen Format sichern
 if (state.round && state.round.final && state.round.final.winner && !state.rounds.some((r) => r.id === state.round.id)) {
   state.rounds.push(clone(state.round));
-  persist();
+  persist(true);
 }
 renderAll(false);
 pollLive(true);
+renderSyncDot();
+if (GROUP) {
+  if (root._placeholder) {
+    els.loading.hidden = false;
+    setTimeout(() => {
+      if (root._placeholder && els.loadingBtn.hidden) els.loadingText.textContent = "Dauert länger als sonst. Beim ersten Öffnen braucht die App einmal kurz Internet.";
+    }, 12000);
+  }
+  SYNC.start(GROUP, root, {
+    onRemote: hookRemote, onRemoved: hookRemoved, onRounds: hookRounds, onGroup: hookGroup,
+    onStatus: hookStatus, onReady: hookReady, onGroupMissing: hookGroupMissing
+  });
+  let invite = false;
+  try { invite = sessionStorage.getItem("fca-invite") === "1"; sessionStorage.removeItem("fca-invite"); } catch (e) { /* egal */ }
+  if (invite) openGroupSheet("invite");
+}
+if (joinOffer) openGroupSheet("join", joinOffer);
 if (document.fonts && document.fonts.ready) {
   document.fonts.ready.then(() => {
     ui.wheelSig = "";

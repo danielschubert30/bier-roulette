@@ -35,7 +35,13 @@ Wer holt das nächste Bier? Das Glücksrad für unsere FCA-Runde im Stadion.
 - Gäste trägst du unter „Anwesenheit“ ein. Sie drehen nur an diesem Abend mit, stehen aber in der Statistik. Ein Finale spielen nur Stammspieler.
 - Stammspieler lassen sich jederzeit hinzufügen oder entfernen, auch mitten in einer Runde.
 
-Gespeichert wird vorerst auf dem Handy, auf dem gedreht wird.
+## Gemeinsam spielen
+
+- Einmal von dem Handy mit dem bisherigen Stand: Kader → „Gemeinsam spielen“ → „Gemeinsam starten“. Der Stand wird hochgeladen, danach „Link teilen“ in die Gruppe schicken.
+- Wer den Link öffnet, sieht denselben Stand und kann mitdrehen. Dreht einer, dreht das Rad bei allen mit.
+- Am iPhone mit der App auf dem Home-Bildschirm: Startet sie ohne gemeinsame Runde, den Link in der App unter Kader → „Gemeinsam spielen“ einfügen.
+- Der Punkt oben neben dem Namen zeigt die Verbindung: grün aktuell, gelb wird hochgeladen, rot offline. Ohne Netz wird weitergespielt und später nachgetragen.
+- „Verlassen“ holt den eigenen Stand dieses Handys zurück.
 
 ## Für die Weiterentwicklung
 

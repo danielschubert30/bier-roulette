@@ -62,7 +62,8 @@ export function newCompetition(name, fca, players) {
     debts: [],            // Bierschulden von Fehlenden
     presence: null,       // { day: "JJJJ-MM-TT", ids: [...] } – wer an diesem Abend da ist
     tipp: null,           // Tippspiel des Abends (siehe js/tipp.js)
-    tippArchive: []       // frühere Tippspiele mit Tipps (für eine spätere Statistik)
+    tippArchive: [],      // frühere Tippspiele mit Tipps (für eine spätere Statistik)
+    lastDone: null        // zuletzt entschiedenes Finale (damit andere Handys es live mitsehen)
   };
 }
 
@@ -82,7 +83,7 @@ function normPlayer(p, i) {
   };
 }
 
-function normRound(r) {
+export function normRound(r) {
   if (!r || typeof r !== "object" || !ID.test(String(r.id || ""))) return null;
   const pot = (Array.isArray(r.pot) ? r.pot : []).map(normPlayer).filter(Boolean);
   if (pot.length < 2) return null;
@@ -135,7 +136,7 @@ function normDebt(d) {
   };
 }
 
-function normComp(raw, fallbackName, fallbackFca) {
+export function normComp(raw, fallbackName, fallbackFca) {
   const c = newCompetition(cleanTitle(raw.name) || fallbackName, raw.fca === undefined ? fallbackFca : raw.fca === true, []);
   if (ID.test(String(raw.id || ""))) c.id = String(raw.id);
   if (isFinite(raw.createdAt) && raw.createdAt > 0) c.createdAt = Number(raw.createdAt);
@@ -153,13 +154,20 @@ function normComp(raw, fallbackName, fallbackFca) {
   }
   c.tipp = normGame(raw.tipp);
   c.tippArchive = (Array.isArray(raw.tippArchive) ? raw.tippArchive : []).map(normGame).filter(Boolean).slice(-60);
+  const done = normRound(raw.lastDone);
+  c.lastDone = done && done.final && done.final.winner ? done : null;
   return c;
 }
 
-export function load() {
+// key: eigener Speicherplatz, z. B. für den Zwischenstand einer gemeinsamen Gruppe
+export function hasSaved(key = KEY) {
+  try { return !!localStorage.getItem(key); } catch (e) { return false; }
+}
+
+export function load(key = KEY) {
   let raw = null;
   try {
-    raw = JSON.parse(localStorage.getItem(KEY) || "null");
+    raw = JSON.parse(localStorage.getItem(key) || "null");
   } catch (e) {
     raw = null;
   }
@@ -189,9 +197,9 @@ export function load() {
   return root;
 }
 
-export function save(root) {
+export function save(root, key = KEY) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(root));
+    localStorage.setItem(key, JSON.stringify(root));
     return true;
   } catch (e) {
     return false;

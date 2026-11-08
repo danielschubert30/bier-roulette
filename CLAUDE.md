@@ -21,7 +21,7 @@
 
 ## Technik
 
-- Reines HTML, CSS und JavaScript (ES-Module), **kein Build-Schritt**, keine Abhängigkeiten außer Google Fonts.
+- Reines HTML, CSS und JavaScript (ES-Module), **kein Build-Schritt**. Abhängigkeiten: Google Fonts und das Firebase-SDK als Kopie in `vendor/firebase/` (wird nur im gemeinsamen Modus geladen).
 - Gehostet über **GitHub Pages** aus dem Branch `main`, Wurzelverzeichnis. Ein Push auf `main` geht automatisch online (dauert 1–2 Minuten).
 - Installierbar als App (PWA): `manifest.webmanifest`, `sw.js`.
 - **Bei jeder Veröffentlichung `VERSION` in `sw.js` und `APP_VERSION` in `js/app.js` hochzählen**, sonst sehen Handys mit installierter App die alte Fassung.
@@ -38,12 +38,16 @@
 | `js/store.js` | Speichern auf dem Gerät (localStorage), Datenmodell, Standard-Kader |
 | `js/content.js` | Sprüche, FCA-Fakten, Ergebnistexte |
 | `js/tipp.js` | Tippspiel: Fragen, Feldgrößen, Auswertung der Live-Daten (OpenLigaDB), ohne Oberfläche |
+| `js/sync.js` | Gemeinsamer Stand über Firebase: Hochladen per Transaktion, Zusammenführen (`merge3`), Gruppe anlegen/beitreten |
+| `vendor/firebase/` | Firebase JS SDK 13.1.0 (app, auth, firestore), unverändert bis auf die Importpfade |
+| `firestore.rules` | Sicherheitsregeln (in der Konsole unter Firestore → Regeln veröffentlicht; bei Änderung dort neu einfügen) |
+| `tests/` | Zwei-Handy-Test mit nachgebauter Firebase (`tests/README.md`) |
 
 ### Datenmodell (`js/store.js`)
 
 Gespeichert wird ein Objekt `{version: 2, activeId, competitions, settings, admin}`. Ältere Stände (Fassung 1, alles direkt im Objekt) werden beim Laden zur Meisterschaft „FCA-Spieltage“. In `js/app.js` ist `root` das Gesamtobjekt und `state` die aktive Meisterschaft; alle Felder unten gehören zu einer Meisterschaft (`{id, name, createdAt, fca, …}`). `fca` = FCA-Fakten beim Drehen.
 
-- `admin`: `{salt, hash}` der Admin-PIN (SHA-256) oder `null`. `requireAdmin(was, fn)` schützt Rückgängig, Löschen, Abbrechen, Kampflos, Zurücksetzen und Meisterschaft löschen. Das ist nur ein Schutz auf dem Gerät; bei Phase 2 muss der Server die Rechte prüfen.
+- `admin`: `{salt, hash}` der Admin-PIN (SHA-256) oder `null`. `requireAdmin(was, fn)` schützt Rückgängig, Löschen, Abbrechen, Kampflos, Zurücksetzen und Meisterschaft löschen. Geprüft wird in der App (gilt im gemeinsamen Modus für alle Handys der Gruppe); bewusst ohne Server-Prüfung, mit Daniel so abgestimmt (08.11.2026).
 
 - `players`: `{id, name, color, active, guest}` – Kader, max. 20 (`MAX_ROSTER`). Stammspieler: `active` = spielt mit, max. 10 (`MAX_WHEEL`). Gäste (`guest: true`) sind nie `active`; sie stehen nur im Topf, solange sie heute als anwesend markiert sind (`syncRoundMembers`). Rad max. 12 Felder (`MAX_ON_WHEEL`).
 - `presence`: `{day, ids}` – wer an diesem Abend da ist. Ein Abend geht bis 6 Uhr früh (`dayStart`). Ohne Eintrag für heute fragt die App vor dem ersten Dreh nach.
@@ -53,6 +57,7 @@ Gespeichert wird ein Objekt `{version: 2, activeId, competitions, settings, admi
 - `debts`: Bierschulden `{id, playerId, at, roundId, reason: pick|forfeit, name, color, settledAt, beers}`.
 - Biertempo: `beerLog` (alle wirklich geholten Biere mit Zeit) und `gapsOf` (Abstände am selben Abend) speisen Ticker, Ergebnis und Statistik.
 - `beers` = Anzahl Anwesender (Mitspieler) im Moment des Holens. Daraus rechnet die Statistik den Bier-Saldo pro Saison (Juli–Juni): geholte Biere minus Saisonschnitt × Anzahl.
+- `lastDone`: zuletzt entschiedenes Finale (damit andere Handys den letzten Schuss und den Champion sehen, auch bei nachgeholten Finals).
 - `tipp`: Tippspiel des Abends `{day, match, tips, results, liveSays, locked, seen}`, `tippArchive`: frühere mit Tipps (max. 60). Regeln und Prüfung in `js/tipp.js` (`normGame`, `weightOf`, `evaluate`, `applyLive`). Feldgröße pro Spieler: 1 ± 0,25 je Frage, mindestens 0,25. Ergebnisse haben `src: live|manual`; Live-Daten überschreiben nie von Hand Eingetragenes.
 - Kader-Änderungen wirken sofort: neue Stammspieler kommen in den `pot` der laufenden Runde (`joinRound`), ausgeschaltete oder gelöschte verlassen ihn ohne Schuld (`leaveRound`, gesperrt für Finalisten und die letzten zwei: `leaveBlocker`). Im Finale gelten Neue erst ab der nächsten Runde.
 
@@ -77,6 +82,16 @@ python3 -m http.server 8080
 ```
 Dann `http://localhost:8080` öffnen und in den Entwicklertools die Handy-Ansicht wählen.
 
-## Nächster großer Schritt
+## Gemeinsamer Stand (Firebase, seit 1.5.0)
 
-Phase 2 (`ANFORDERUNGEN.md`, D5): gemeinsamer Stand und live mitdrehen über Firebase Firestore. Daniel legt dafür ein kostenloses Firebase-Projekt an; die Speicherfunktionen in `js/store.js` sind so gekapselt, dass eine zweite Speicherart daneben passt.
+- Projekt `bier-roulette` (Daniels Google-Konto), Spark-Tarif, Firestore Standardversion in `europe-west3`, Anmeldung „Anonym“ aktiv, Web-App „Bier-Roulette Web“. Zugangsdaten stehen in `js/sync.js` (nicht geheim; geschützt wird über `firestore.rules`).
+- Lokal oder gemeinsam: Ohne Gruppe läuft alles wie vorher nur auf dem Handy (`fca-bier-roulette:v1`). Mit Gruppe (`?g=CODE` im Link oder gespeichert unter `fca-bier-roulette:group`) liegt ein Zwischenstand unter `fca-bier-roulette:g:CODE`, Abgleich-Daten unter `fca-bier-roulette:sync:CODE`. Ohne Zwischenstand zeigt die App „Lade den gemeinsamen Stand“ (`root._placeholder`) und lädt nichts hoch.
+- Datenbank: `groups/{code}` (admin), `groups/{code}/comps/{id}` (`rev`, `s` = geteilter Teil der Meisterschaft als JSON), `…/rounds/{id}` (fertige Runden, nur hinzufügen), `…/tipps/{tag}` (Tipp-Archiv).
+- Geteilt wird `SYNC.SHARED` (Kader, laufende Runde, offene Finals, Schulden, Anwesenheit, Tippspiel, `lastDone`). Nur auf dem Gerät: aktive Meisterschaft, Ton/Vibration, gesehene Tipp-Auflösungen (`tipp.seen`).
+- `persist(quiet)` speichert lokal und meldet die Änderung an `SYNC.changed`. Automatische Änderungen (Gäste in den Topf, Finale starten, Tippspiel anlegen, Live-Daten) mit `quiet = true`: werden sie verworfen, gibt es keine Meldung.
+- Drehen und Schießen: Ergebnis erst festlegen und mit `SYNC.commitNow` hochladen, dann animieren. „conflict“ = ein anderes Handy war schneller → Meldung, dessen Stand wird nachgespielt. „offline“ = hier weiterspielen, später nachtragen.
+- Zusammenführen (`merge3` in `js/sync.js`): Felder einzeln, Listen mit `id` (Kader, Schulden, Topf) eintragsweise. Gleichzeitige Änderungen an `round.picks`, `round.final`, `pending`, `lastDone` oder Runde beendet vs. weitergedreht = Konflikt (fremder Stand gilt).
+- Fremde Änderungen: `hookRemote` → Warteschlange (`ui.remoteQ`, nie während einer Animation) → `applyRemote` erkennt neuen Dreh/Schuss/Champion (`remoteEvents`) und spielt ihn nach (`remoteSpin` mit `ui.hidePick`, `remoteShot`).
+- Admin-PIN liegt in `groups/{code}.admin` und gilt für alle Handys der Gruppe. Prüfung nur in der App (Schutz vor Versehen, nicht vor Technikern).
+- iPhone: Die App auf dem Home-Bildschirm hat einen eigenen Speicher. Wer sie dort ohne Gruppe öffnet, fügt den Link unter Kader → Gemeinsam spielen ein.
+- Testen: `tests/zwei_handys.py` mit nachgebauter Firebase. Die echte Datenbank ist aus der Claude-Umgebung nicht erreichbar; ein Kurztest gegen Firebase geht über Daniels Chrome auf der GitHub-Pages-Seite.

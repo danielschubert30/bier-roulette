@@ -56,7 +56,12 @@ Legende: `[x]` umgesetzt · `[ ]` offen
 - [x] **D2 Als App aufs Handy:** „Zum Home-Bildschirm“ (PWA), funktioniert auch bei schlechtem Netz im Stadion.
 - [x] **D3 Speichern auf dem Handy** (Phase 1): Kader, laufende Runde und Statistik bleiben erhalten.
 - [x] **D4 Bildschirm bleibt an**, solange die App offen ist (wo das Handy es erlaubt).
-- [ ] **D5 Gemeinsamer Stand für alle Handys** (Phase 2): Firebase-Datenbank, live mitdrehen auf allen Geräten. Braucht ein kostenloses Firebase-Projekt von Daniel.
+- [x] **D5 Gemeinsamer Stand für alle Handys** (Phase 2, beauftragt 08.11.2026): Firebase-Projekt „bier-roulette“ (kostenloser Spark-Tarif, Datenbank in Frankfurt). Unter Kader → „Gemeinsam spielen“ lädt Daniel seinen Stand hoch und bekommt einen Einladungslink. Wer ihn öffnet, sieht denselben Stand.
+- [x] **D6 Live mitdrehen:** Dreht oder schießt einer, sehen die anderen Handys das Rad bzw. den Elfmeter live mit und bekommen dasselbe Ergebnisfenster. Jeder mit Link darf drehen (abgestimmt 08.11.2026).
+- [x] **D7 Gleichzeitig und Funkloch:** Drehen zwei gleichzeitig, zählt der Schnellere; der andere bekommt „Ein anderes Handy hat gerade gedreht“ und sieht dessen Dreh. Ohne Netz wird weitergespielt und nachgetragen. War inzwischen ein anderes Handy schneller, gilt dessen Stand (mit Meldung). Tipps, Anwesenheit und Kader-Änderungen von mehreren Handys laufen zusammen.
+- [x] **D8 Admin-PIN für die ganze Gruppe:** Die PIN gilt auf allen Handys der Gruppe (bleibt ein Schutz vor Versehen und Schabernack, kein Tresor).
+- [x] **D9 Verbindungsanzeige:** Punkt neben dem Namen oben links: grün aktuell, gelb wird hochgeladen, rot offline.
+- [x] **D10 Verlassen:** „Verlassen“ holt den eigenen Stand dieses Handys zurück; Beitreten auch per eingefügtem Link (z. B. für die App auf dem iPhone-Home-Bildschirm).
 
 ## E – Statistik
 

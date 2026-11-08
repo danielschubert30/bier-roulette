@@ -37,6 +37,7 @@
     <button type="button" class="brand" id="compBtn" aria-haspopup="dialog" title="Meisterschaft wechseln">
       <svg class="brand-mark" aria-hidden="true"><use href="#i-wheel"/></svg>
       <span id="compName">FCA-Spieltage</span>
+      <i class="sync-dot" id="syncDot" role="img" hidden></i>
       <svg class="brand-chev" aria-hidden="true"><use href="#i-chev"/></svg>
     </button>
     <button type="button" class="champ-pill" id="champPill" hidden>
@@ -162,6 +163,17 @@
         <button type="button" class="btn ghost" id="abortBtn">Runde abbrechen</button>
       </div>
 
+      <h2 class="section-title">Gemeinsam spielen</h2>
+      <div class="group-box">
+        <p class="group-info" id="groupInfo"></p>
+        <div class="setting-actions" id="groupActions"></div>
+        <form class="add group-join" id="joinForm" autocomplete="off" hidden>
+          <label class="sr" for="joinInput">Einladungslink</label>
+          <input id="joinInput" type="text" inputmode="url" placeholder="Link einfügen" enterkeyhint="go">
+          <button type="submit" class="btn ghost">Mitspielen</button>
+        </form>
+      </div>
+
       <h2 class="section-title">Einstellungen</h2>
       <div class="setting">
         <p>Ton<small>Klackern, Pfiff und Jubel</small></p>
@@ -182,7 +194,7 @@
         <p>Statistik zurücksetzen<small>Löscht alle Runden dieser Meisterschaft. Der Kader bleibt.</small></p>
         <button type="button" class="btn ghost" id="resetBtn">Zurücksetzen</button>
       </div>
-      <p class="footnote">Gespeichert auf diesem Handy · Version <span id="version"></span><br>Private Fan-App, keine offizielle App des FC Augsburg.</p>
+      <p class="footnote"><span id="storeNote">Gespeichert auf diesem Handy</span> · Version <span id="version"></span><br>Private Fan-App, keine offizielle App des FC Augsburg.</p>
     </section>
   </main>
 
@@ -272,6 +284,21 @@
   <div class="reveal-body" id="revealBody"></div>
   <div class="sheet-actions" id="revealActions"></div>
 </section>
+<section class="sheet sheet-plain" id="groupSheet" hidden role="dialog" aria-modal="true" aria-labelledby="groupTitle">
+  <span class="sheet-label">Gemeinsam spielen</span>
+  <h2 class="presence-title" id="groupTitle"></h2>
+  <p class="group-text" id="groupText"></p>
+  <p class="group-link" id="groupLink" hidden></p>
+  <div class="sheet-actions" id="groupSheetActions"></div>
+</section>
+<div class="loading" id="loading" hidden role="status">
+  <div class="loading-box">
+    <svg class="loading-ico" aria-hidden="true"><use href="#i-wheel"/></svg>
+    <p class="kicker">Gemeinsame Runde</p>
+    <p class="loading-text" id="loadingText">Lade den gemeinsamen Stand …</p>
+    <button type="button" class="btn ghost" id="loadingBtn" hidden>Ohne gemeinsame Runde weiter</button>
+  </div>
+</div>
 <div class="toast" id="toast" hidden role="status"></div>
 
 <script type="module" src="js/app.js"></script>

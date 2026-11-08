@@ -1,6 +1,6 @@
 // Service Worker: macht die App offline-fähig (schlechtes Netz im Stadion).
 // Bei jeder Veröffentlichung VERSION hochzählen, damit Handys die neue Fassung laden.
-const VERSION = "v1.4.0";
+const VERSION = "v1.5.0";
 const CACHE = "bier-roulette-" + VERSION;
 const SHELL = [
   "./",
@@ -12,6 +12,10 @@ const SHELL = [
   "js/store.js",
   "js/content.js",
   "js/tipp.js",
+  "js/sync.js",
+  "vendor/firebase/firebase-app.js",
+  "vendor/firebase/firebase-auth.js",
+  "vendor/firebase/firebase-firestore.js",
   "manifest.webmanifest",
   "assets/fca-logo.png",
   "assets/icon-192.png",

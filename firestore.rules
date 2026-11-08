@@ -1,0 +1,28 @@
+rules_version = '2';
+// Sicherheitsregeln für das FCA Bier-Roulette (in der Firebase-Konsole unter Firestore > Regeln veröffentlicht).
+// Zugriff nur mit (anonymer) Anmeldung der App und nur über den geheimen Gruppen-Code aus dem Einladungslink.
+// Gruppen lassen sich nicht auflisten oder löschen; wer den Code kennt, spielt mit.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function validCode(code) { return code.matches('^[A-Za-z0-9]{16,40}$'); }
+
+    match /groups/{code} {
+      allow get: if signedIn();
+      allow create, update: if signedIn() && validCode(code)
+        && request.resource.data.keys().hasOnly(['createdAt', 'admin']);
+      allow list, delete: if false;
+
+      match /comps/{compId} {
+        allow read, delete: if signedIn() && validCode(code);
+        allow create, update: if signedIn() && validCode(code)
+          && request.resource.data.s is string && request.resource.data.rev is int
+          && request.resource.data.s.size() < 900000;
+
+        match /{sub}/{docId} {
+          allow read, write: if signedIn() && validCode(code) && (sub == 'rounds' || sub == 'tipps');
+        }
+      }
+    }
+  }
+}
