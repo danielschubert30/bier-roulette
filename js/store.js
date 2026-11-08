@@ -2,6 +2,7 @@
 // Alles, was die App sich merkt, liegt in einem Objekt unter einem localStorage-Schlüssel:
 // { version: 2, activeId, competitions: [Meisterschaft, ...], settings, admin }
 // Jede Meisterschaft hat ihren eigenen Kader, ihre Runden, Statistik und Bierschulden.
+import { normGame } from "./tipp.js";
 
 const KEY = "fca-bier-roulette:v1";
 
@@ -59,7 +60,9 @@ export function newCompetition(name, fca, players) {
     rounds: [],           // abgeschlossene Runden (in Reihenfolge des Abschlusses)
     pending: [],          // Runden mit verschobenem Finale
     debts: [],            // Bierschulden von Fehlenden
-    presence: null        // { day: "JJJJ-MM-TT", ids: [...] } – wer an diesem Abend da ist
+    presence: null,       // { day: "JJJJ-MM-TT", ids: [...] } – wer an diesem Abend da ist
+    tipp: null,           // Tippspiel des Abends (siehe js/tipp.js)
+    tippArchive: []       // frühere Tippspiele mit Tipps (für eine spätere Statistik)
   };
 }
 
@@ -148,6 +151,8 @@ function normComp(raw, fallbackName, fallbackFca) {
   if (raw.presence && typeof raw.presence.day === "string" && Array.isArray(raw.presence.ids)) {
     c.presence = { day: raw.presence.day, ids: raw.presence.ids.filter((id) => ID.test(String(id))).map(String) };
   }
+  c.tipp = normGame(raw.tipp);
+  c.tippArchive = (Array.isArray(raw.tippArchive) ? raw.tippArchive : []).map(normGame).filter(Boolean).slice(-60);
   return c;
 }
 

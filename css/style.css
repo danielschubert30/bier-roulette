@@ -430,12 +430,12 @@ button { touch-action: manipulation; }
 .presence-list .player-name { font-size: 20px; }
 .presence-note { margin: 4px 0 8px; font-size: 13px; color: var(--chalk-3); }
 
-.section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
-.select {
-  height: 38px; padding: 0 30px 0 12px; border-radius: 10px; border: 1px solid var(--line);
-  background: var(--surface-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23eef4ef' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 10px center;
-  color: var(--chalk); font-family: var(--font-label); font-weight: 700; font-size: 15px; -webkit-appearance: none; appearance: none;
-}
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.section-meta { font-family: var(--font-label); font-weight: 600; font-size: 14px; letter-spacing: 0.04em; color: var(--chalk-3); white-space: nowrap; }
+.seg-sm button { height: 30px; padding: 0 14px; font-size: 14px; }
+.seg-scroll { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.seg-scroll::-webkit-scrollbar { display: none; }
+.seg-scroll button { flex: none; }
 .s-head, .s-row { display: grid; grid-template-columns: minmax(0, 1.3fr) 46px 46px 58px; align-items: center; gap: 10px; }
 .s-head { padding: 10px 0 8px; border-bottom: 1px solid var(--line); font-family: var(--font-label); font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--chalk-3); }
 .s-head span:nth-child(n+2) { text-align: right; }
@@ -514,3 +514,116 @@ button { touch-action: manipulation; }
 .rec-label { font-weight: 600; }
 .rec-value { font-family: var(--font-display); font-weight: 900; font-size: 22px; font-variant-numeric: tabular-nums; }
 .rec-meta { grid-column: 1 / -1; font-size: 12px; color: var(--chalk-3); }
+
+/* ---------- Tippspiel ---------- */
+.ico { width: 16px; height: 16px; flex: none; }
+.tipp-bar {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto 14px; align-items: center; gap: 10px;
+  width: 100%; min-height: 48px; padding: 6px 12px; border-radius: 12px; cursor: pointer; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); color: var(--chalk);
+}
+.tipp-bar.is-due { border-color: var(--gold); background: linear-gradient(90deg, var(--gold-soft), transparent 70%), var(--surface); }
+.tipp-bar:disabled { opacity: 0.55; cursor: default; }
+.tipp-ico { width: 22px; height: 22px; color: var(--gold); }
+.tipp-main { display: flex; flex-direction: column; min-width: 0; }
+.tipp-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.tipp-title { font-family: var(--font-label); font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); flex: none; }
+.tipp-match { font-size: 12px; color: var(--chalk-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tipp-sub { font-family: var(--font-label); font-weight: 600; font-size: 16px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tipp-qs { display: flex; gap: 5px; }
+.tipp-qs:empty { display: none; }
+.tq-dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--chalk-3); }
+.tq-dot.is-done { background: var(--gold); border-color: var(--gold); }
+.tq-dot.is-void { border-style: dashed; opacity: 0.6; }
+.tipp-chev { width: 14px; height: 14px; color: var(--chalk-3); transform: rotate(-90deg); }
+
+/* Punkte am Namen: richtig, daneben, offen */
+.tmarks { display: inline-flex; gap: 2px; margin-left: 1px; }
+.tm { width: 6px; height: 6px; border-radius: 50%; border: 1.5px solid var(--chalk-3); }
+.tm-right { background: var(--good); border-color: var(--good); }
+.tm-wrong { background: var(--bad); border-color: var(--bad); }
+.tm-void { border-style: dashed; opacity: 0.5; }
+.pot.is-dense .tm { width: 5px; height: 5px; }
+
+/* Tipp-Fenster */
+.tipp-body { display: flex; flex-direction: column; gap: 10px; }
+.tipp-people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.tipp-person {
+  width: 100%; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  min-height: 52px; padding: 0 12px; border-radius: 12px; border: 1px solid transparent; background: var(--surface-2); cursor: pointer; text-align: left;
+}
+.tipp-person .player-name { font-size: 20px; }
+.tipp-state {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 999px;
+  background: var(--chalk); color: var(--night); font-family: var(--font-label); font-weight: 700; font-size: 15px;
+}
+.tipp-person.is-done .tipp-state { background: transparent; color: var(--good); padding: 0 4px; }
+.tipp-person.is-done .player-name { color: var(--chalk-2); }
+.tipp-who { align-self: flex-start; padding: 8px 0; min-height: 44px; }
+.tq { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: var(--surface-2); }
+.tq-text { margin: 0; font-family: var(--font-label); font-weight: 700; font-size: 18px; line-height: 1.2; }
+.tq-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tq-opt {
+  height: 52px; padding: 0 10px; border-radius: 12px; cursor: pointer; border: 1.5px solid var(--chalk-4); background: transparent;
+  font-family: var(--font-display); font-weight: 900; font-size: 22px; text-transform: uppercase; letter-spacing: 0.02em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tq-opt[aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: var(--night); }
+
+.tres-list { display: flex; flex-direction: column; gap: 6px; }
+.tres { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); }
+.tres-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.tres-q { font-family: var(--font-label); font-weight: 700; font-size: 16px; line-height: 1.25; }
+.tres-v { flex: none; font-family: var(--font-display); font-weight: 900; font-size: 20px; text-transform: uppercase; color: var(--gold); }
+.tres-v.is-open { font-family: var(--font-label); font-weight: 600; font-size: 14px; letter-spacing: 0.06em; color: var(--chalk-3); text-transform: none; }
+.tres-v.is-void { color: var(--chalk-3); }
+.tres-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--chalk-3); }
+.tres-meta .link-btn { font-size: 14px; padding: 0 2px; min-height: 32px; }
+.tres-hint { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px 6px 10px; border-radius: 10px; border: 1px dashed var(--gold); font-size: 13px; }
+.tres-opts { display: flex; gap: 6px; flex-wrap: wrap; }
+.tres-opts .mini-btn { flex: 1 1 0; min-width: 0; height: 44px; overflow: hidden; text-overflow: ellipsis; }
+.tres-note { margin: -2px 0 0; font-size: 12px; color: var(--chalk-3); }
+.tipp-kicker { margin-top: 4px; }
+.tt-row { display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, 44px) 52px; align-items: center; gap: 6px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.tt-row:last-child { border-bottom: 0; }
+.tt-head { padding: 10px 0 8px; font-family: var(--font-label); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--chalk-3); }
+.tt-head span:nth-child(n+2) { text-align: center; }
+.tt-head span:last-child { text-align: right; }
+.tt-row .who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
+.tt-cell { text-align: center; font-family: var(--font-label); font-weight: 700; font-size: 14px; border-radius: 6px; padding: 2px 0; }
+.tt-open { color: var(--chalk-2); }
+.tt-right { color: var(--night); background: var(--good); }
+.tt-wrong { color: var(--bad-ink); background: var(--bad); }
+.tt-void { color: var(--chalk-3); text-decoration: line-through; }
+.tt-w { font-weight: 700; white-space: nowrap; }
+.tipp-ok { display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--gold-soft); border: 1px solid var(--gold); color: var(--chalk); font-weight: 600; }
+.tipp-ok .ico { color: var(--good); width: 18px; height: 18px; }
+.sheet-reveal:not([hidden]) .tipp-ok { animation: none; }
+
+/* Auflösung */
+.sheet-reveal { z-index: 42; box-shadow: 0 -20px 40px var(--shade), inset 0 4px 0 var(--gold); }
+.reveal-title { margin: 2px 0 0; font-family: var(--font-display); font-weight: 900; font-size: 38px; line-height: 1; text-transform: uppercase; color: var(--gold); text-wrap: balance; }
+.reveal-src { margin: 4px 0 8px; font-size: 13px; color: var(--chalk-3); }
+.reveal-body { display: flex; flex-direction: column; gap: 10px; margin-bottom: 6px; }
+.rv-group { padding: 10px 12px; border-radius: 14px; background: var(--surface-2); box-shadow: inset 4px 0 0 var(--accent); }
+.rv-group.is-right { --accent: var(--good); }
+.rv-group.is-wrong { --accent: var(--bad); }
+.rv-head { margin: 0 0 6px; font-family: var(--font-label); font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+.rv-empty { margin: 0; font-size: 14px; color: var(--chalk-3); }
+.rv-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.rv-list li { display: grid; grid-template-columns: 18px 12px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 36px; }
+.rv-ico { width: 18px; height: 18px; color: var(--accent); }
+.rv-name { font-family: var(--font-display); font-weight: 900; font-size: 21px; text-transform: uppercase; line-height: 1.05; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-w { font-family: var(--font-display); font-weight: 900; font-size: 20px; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rv-void { margin: 0; padding: 12px; border-radius: 14px; background: var(--surface-2); color: var(--chalk-2); }
+.sheet-reveal:not([hidden]) .rv-list li { animation: rise 0.35s ease both; }
+.sheet-reveal:not([hidden]) .rv-list li:nth-child(2) { animation-delay: 0.06s; }
+.sheet-reveal:not([hidden]) .rv-list li:nth-child(3) { animation-delay: 0.12s; }
+.sheet-reveal:not([hidden]) .rv-list li:nth-child(n+4) { animation-delay: 0.18s; }
+@media (prefers-reduced-motion: reduce) {
+  .sheet-reveal:not([hidden]) .rv-list li { animation: none; }
+}
+@media (max-height: 680px) {
+  .tipp-bar { min-height: 44px; padding-block: 4px; }
+  .tipp-sub { font-size: 15px; }
+}

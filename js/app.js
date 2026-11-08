@@ -1,10 +1,11 @@
 // FCA Bier-Roulette – Ablauf und Oberfläche.
 import { load, save, MAX_WHEEL, MAX_ON_WHEEL, MAX_ROSTER, MAX_COMPS, PALETTE, rand, uid, cleanName, cleanTitle, newCompetition } from "./store.js";
-import { createWheel } from "./wheel.js";
+import { createWheel, weightedIndex } from "./wheel.js";
+import * as TP from "./tipp.js";
 import * as SO from "./shootout.js";
 import { SPIN_QUIPS, RESULT_QUIPS, FINAL_INTROS, CHAMPION_QUIPS, SHOT_TEXT, FCA_FACTS, TEMPO_QUIPS } from "./content.js";
 
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.4.0";
 const NS = "http://www.w3.org/2000/svg";
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const $ = (id) => document.getElementById(id);
@@ -24,7 +25,7 @@ const els = {
   presenceCancel: $("presenceCancel"), presenceOk: $("presenceOk"), guestForm: $("guestForm"), guestInput: $("guestInput"),
   guestRoster: $("guestRoster"), roleReg: $("roleReg"), roleGuest: $("roleGuest"),
   champCard: $("champCard"), rangeToday: $("rangeToday"), rangeSeason: $("rangeSeason"), rangeAll: $("rangeAll"),
-  kpis: $("kpis"), table: $("table"), seasonSel: $("seasonSel"), saldo: $("saldo"), debts: $("debts"), honors: $("honors"),
+  kpis: $("kpis"), table: $("table"), seasonSeg: $("seasonSeg"), seasonMeta: $("seasonMeta"), saldo: $("saldo"), debts: $("debts"), honors: $("honors"),
   squadNote: $("squadNote"), roster: $("roster"), addForm: $("addForm"), nameInput: $("nameInput"), addBtn: $("addBtn"),
   roundTools: $("roundTools"), abortBtn: $("abortBtn"), soundToggle: $("soundToggle"), vibeToggle: $("vibeToggle"),
   resetBtn: $("resetBtn"), version: $("version"), toast: $("toast"),
@@ -32,7 +33,12 @@ const els = {
   compForm: $("compForm"), compInput: $("compInput"), compCopy: $("compCopy"), compFca: $("compFca"), compClose: $("compClose"),
   pinSheet: $("pinSheet"), pinTitle: $("pinTitle"), pinNote: $("pinNote"), pinForm: $("pinForm"),
   pinInput: $("pinInput"), pinInput2: $("pinInput2"), pinOk: $("pinOk"), pinCancel: $("pinCancel"),
-  adminInfo: $("adminInfo"), adminSet: $("adminSet"), adminRemove: $("adminRemove"), tempo: $("tempo")
+  adminInfo: $("adminInfo"), adminSet: $("adminSet"), adminRemove: $("adminRemove"), tempo: $("tempo"),
+  tippBar: $("tippBar"), tippMatch: $("tippMatch"), tippSub: $("tippSub"), tippQs: $("tippQs"),
+  tippSheet: $("tippSheet"), tippLabel: $("tippLabel"), tippTitle: $("tippTitle"), tippNote: $("tippNote"),
+  tippBody: $("tippBody"), tippActions: $("tippActions"),
+  revealSheet: $("revealSheet"), revealLabel: $("revealLabel"), revealTitle: $("revealTitle"), revealSrc: $("revealSrc"),
+  revealBody: $("revealBody"), revealActions: $("revealActions")
 };
 
 const root = load();
@@ -42,7 +48,10 @@ const ui = {
   spinning: false, shooting: false, sheetFor: null, sheetDebt: false, presenceCb: null,
   playingId: null,       // offenes Finale, das gerade nachgeholt wird
   champRoundId: null,    // Champion-Anzeige für ein nachgeholtes Finale
-  armed: null, armTimer: null, newChamp: false, wheelSig: "", finalLine: null, lastQuip: -1
+  armed: null, armTimer: null, newChamp: false, wheelSig: "", wheelIds: "", finalLine: null, lastQuip: -1,
+  tipFor: null, tipDraft: null, tipDone: null,   // Tippspiel: wer gerade verdeckt tippt / zuletzt getippt hat
+  reveals: [], revealing: null,   // Auflösungen, die noch angezeigt werden
+  lastManual: null                // letzte Auflösung per Knopf (für „Doch nicht“)
 };
 
 const wheel = createWheel(els.wheel, { logoHref: "assets/fca-logo.png" });
@@ -358,6 +367,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState !== "visible") return;
   if (wantAwake) keepAwake();
   renderAll(false); // neuer Abend? Dann fragt die App wieder nach der Anwesenheit
+  pollLive(true);   // Tippspiel: gleich den aktuellen Stand holen
 });
 
 /* ---------- Ticker ---------- */
@@ -399,9 +409,13 @@ function tickerFor(mode) {
       return { label: `Gastrunde · Bier Nr. ${no}`, text: "Nur noch die Gäste sind auf dem Rad. Das Finale bleibt unter Stammspielern." };
     }
     const away = list.filter((p) => !isPresent(p.id)).length;
+    const ws = list.map((p) => weightFor(p.id));
+    const sum = ws.reduce((a, b) => a + b, 0);
+    const lo = Math.min(...ws) / sum, hi = Math.max(...ws) / sum;
+    const risk = hi - lo < 0.005 ? `Risiko je ${pctF.format(1 / list.length)}.` : `Risiko ${pctF.format(lo)} bis ${pctF.format(hi)}, je nach Tipps.`;
     return {
       label: `Bier Nr. ${no}`,
-      text: `${list.length} im Topf` + (away ? `, davon ${away} heute nicht da` : "") + `. Risiko je ${pctF.format(1 / list.length)}.` + lastBeerNote()
+      text: `${list.length} im Topf` + (away ? `, davon ${away} heute nicht da` : "") + `. ${risk}` + lastBeerNote()
     };
   }
   if (mode === "final") {
@@ -472,6 +486,7 @@ function finishChamp() {
 }
 
 async function spin() {
+  if (!els.revealSheet.hidden || !els.tippSheet.hidden) return;
   const r = state.round;
   syncWheel(false);
   ui.spinning = true;
@@ -484,7 +499,7 @@ async function spin() {
   }, 2900);
   renderChrome();
   renderNotices();
-  const idx = Math.floor(rand() * wheel.players.length);
+  const idx = weightedIndex(wheel.weights, rand());   // Chance = Feldgröße (Tippspiel), sonst für alle gleich
   const landed = await wheel.spinTo(idx, {
     rnd: rand,
     duration: reduceMotion ? 1100 : 5200 + rand() * 900,
@@ -814,13 +829,17 @@ async function shoot(aim) {
 function syncWheel(animate) {
   const mode = viewMode();
   const base = mode === "spin" ? wheelList(state.round) : mode === "idle" ? activePlayers().concat(presentGuests()) : [];
-  const list = base.map((p) => ({ id: p.id, name: p.name, color: p.color, absent: !isPresent(p.id) }));
-  const sig = list.map((p) => p.id + p.color + p.name + (p.absent ? "-" : "+")).join("|");
+  const list = base.map((p) => ({ id: p.id, name: p.name, color: p.color, absent: !isPresent(p.id), w: weightFor(p.id) }));
+  const sig = list.map((p) => p.id + p.color + p.name + (p.absent ? "-" : "+") + p.w.toFixed(2)).join("|");
   if (sig === ui.wheelSig) return;
+  if (ui.revealing) return;   // Feldgrößen ändern sich erst sichtbar, wenn das Auflösungs-Fenster zu ist
+  const ids = list.map((p) => p.id + p.name).join("|");
+  const sameIds = ids === ui.wheelIds;
   ui.wheelSig = sig;
-  wheel.draw(list, "Kader einschalten");
+  ui.wheelIds = ids;
+  wheel.draw(list, "Kader einschalten", { morph: !reduceMotion });
   const rotor = els.wheel.querySelector(".wheel-rotor");
-  if (animate && !reduceMotion && rotor && rotor.animate) {
+  if (animate && !sameIds && !reduceMotion && rotor && rotor.animate) {
     rotor.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, easing: "ease-out" });
   }
 }
@@ -831,6 +850,10 @@ function chip(p, cls, no, tag) {
   if (no) li.append(h("span", "chip-no", `${no}.`));
   li.append(h("span", "dot"), h("span", null, p.name));
   if (tag) li.append(h("span", "chip-tag", tag));
+  if (!no) {
+    const tm = tipMarks(p.id);
+    if (tm) li.append(tm);
+  }
   return li;
 }
 
@@ -864,7 +887,7 @@ function renderChrome() {
     }
   }
 
-  els.pot.classList.toggle("is-dense", els.pot.children.length > 8);
+  els.pot.classList.toggle("is-dense", els.pot.children.length > 8 || (els.pot.children.length > 4 && !!els.pot.querySelector(".tmarks")));
   els.undoBtn.hidden = !((mode === "spin" || mode === "final") && canUndo() && !ui.sheetFor);
   const busy = ui.spinning || ui.shooting || !!ui.sheetFor;
   els.presenceBtn.disabled = busy;
@@ -1030,6 +1053,7 @@ function renderChampion() {
 }
 
 function renderGame(animate) {
+  ensureTipGame();
   syncRoundMembers();
   let mode = viewMode();
   if (mode === "spin" && finalDue(state.round) && !ui.sheetFor && !ui.spinning) {
@@ -1044,11 +1068,13 @@ function renderGame(animate) {
   if (mode === "final") renderFinal();
   if (mode === "champ") renderChampion();
   renderChrome();
+  renderTipBar();
   renderNotices();
   if (!ui.spinning && !ui.shooting) {
     const t = tickerFor(mode);
     setTicker(t.label, t.text);
   }
+  maybeReveal();
 }
 
 /* ---------- Anwesenheits-Abfrage ---------- */
@@ -1270,13 +1296,18 @@ function renderSaldo() {
   for (const x of fetchRecords()) starts.add(seasonStartOf(x.at));
   const list = [...starts].sort((a, b) => b - a);
   if (ui.seasonStart == null || !starts.has(ui.seasonStart)) ui.seasonStart = list[0];
-  els.seasonSel.replaceChildren();
-  for (const s of list) {
-    const o = document.createElement("option");
-    o.value = String(s);
-    o.textContent = seasonLabel(s);
-    o.selected = s === ui.seasonStart;
-    els.seasonSel.append(o);
+  // Nur eine Saison: kein Umschalter, nur die Angabe. Mehrere: schlanke Knöpfe wie bei Heute/Saison/Gesamt.
+  els.seasonMeta.textContent = list.length === 1 ? seasonLabel(list[0]) : "";
+  els.seasonSeg.hidden = list.length < 2;
+  els.seasonSeg.replaceChildren();
+  if (list.length > 1) {
+    for (const s of list) {
+      const y = new Date(s).getFullYear();
+      const b = btn(null, `${String(y % 100).padStart(2, "0")}/${String((y + 1) % 100).padStart(2, "0")}`, () => { ui.seasonStart = s; renderSaldo(); });
+      b.setAttribute("aria-pressed", String(s === ui.seasonStart));
+      b.setAttribute("aria-label", seasonLabel(s));
+      els.seasonSeg.append(b);
+    }
   }
   els.saldo.replaceChildren();
   const res = computeSaldo(ui.seasonStart);
@@ -1529,7 +1560,7 @@ function removePlayer(id) {
 
 /* ---------- Fenster ---------- */
 function syncBackdrop() {
-  els.sheetBackdrop.hidden = ![els.sheet, els.presenceSheet, els.compSheet, els.pinSheet].some((x) => !x.hidden);
+  els.sheetBackdrop.hidden = ![els.sheet, els.presenceSheet, els.compSheet, els.pinSheet, els.tippSheet, els.revealSheet].some((x) => !x.hidden);
 }
 
 /* ---------- Biertempo ---------- */
@@ -1740,6 +1771,15 @@ function lastChampOf(c) {
 function resetUi() {
   disarm();
   closeSheet();
+  els.tippSheet.hidden = true;
+  els.revealSheet.hidden = true;
+  syncBackdrop();
+  ui.tipFor = null;
+  ui.tipDraft = null;
+  ui.reveals = [];
+  ui.revealing = null;
+  ui.lastManual = null;
+  ui.wheelIds = "";
   resetGoal();
   wheel.highlight(null);
   ui.playingId = null;
@@ -1833,6 +1873,7 @@ function switchComp(id) {
   closeComp();
   renderAll(true);
   toast(`Jetzt aktiv: ${c.name}`);
+  pollLive(true);
 }
 function createComp() {
   const name = cleanTitle(els.compInput.value);
@@ -1861,6 +1902,510 @@ function deleteComp(id) {
   renderAll(true);
 }
 
+/* ---------- Tippspiel ---------- */
+// Drei feste Fragen vor dem Anpfiff (Regeln und Auswertung in js/tipp.js). Nur bei Meisterschaften mit „FCA-Spieltag“.
+const tippOn = () => !!state.fca;
+const tipGame = () => (tippOn() && state.tipp && state.tipp.day === todayKey() ? state.tipp : null);
+const tipCount = (g) => (g ? Object.keys(g.tips).length : 0);
+const tipLocked = (g) => TP.isLocked(g, Date.now());
+const oppOf = (g) => (g && g.match && g.match.opp) || "Gegner";
+const fieldPct = (w) => `${Math.round(w * 100)}\u00a0%`;
+function ensureTipGame() {
+  if (!tippOn()) return null;
+  const day = todayKey();
+  if (state.tipp && state.tipp.day === day) return state.tipp;
+  if (state.tipp && tipCount(state.tipp)) {
+    state.tippArchive.push(state.tipp);
+    if (state.tippArchive.length > 60) state.tippArchive.splice(0, state.tippArchive.length - 60);
+  }
+  state.tipp = TP.newGame(day);
+  ui.reveals = [];
+  persist();
+  return state.tipp;
+}
+function weightFor(id) {
+  const g = tipGame();
+  return g ? TP.weightOf(g, id) : 1;
+}
+function tipPerson(g, pid) {
+  const p = state.players.find((x) => x.id === pid);
+  if (p) return p;
+  const t = g.tips[pid];
+  return { id: pid, name: t ? t.name : "?", color: t ? t.color : PALETTE[0] };
+}
+// Wer heute tippen kann: anwesende Stammspieler und Gäste, dazu alle, die schon getippt haben
+function tipPeople(g) {
+  const list = activePlayers().filter((p) => isPresent(p.id)).concat(presentGuests());
+  if (g) for (const pid of Object.keys(g.tips)) if (!list.some((p) => p.id === pid)) list.push(tipPerson(g, pid));
+  return list;
+}
+function icon(id, cls) {
+  const s = svg("svg", { class: cls || "ico", "aria-hidden": "true" });
+  s.append(svg("use", { href: "#" + id }));
+  return s;
+}
+function kickText(ts) {
+  if (!ts) return "";
+  return dayStart(ts) === dayStart() ? fmtTime(ts) : `${fmtDay(ts).split(" ")[0]} ${fmtTime(ts)}`;
+}
+function matchLine(g) {
+  const m = g.match;
+  if (m && m.id) return `${m.fcaFirst ? "FCA" : m.opp} gegen ${m.fcaFirst ? m.opp : "FCA"}, Anpfiff ${kickText(m.kickoff)}`;
+  if (m) return "Kein FCA-Spiel von heute in den Live-Daten. Getippt wird trotzdem, aufgelöst dann per Knopf.";
+  return LIVE.failed ? "Live-Daten gerade nicht erreichbar. Getippt wird trotzdem." : "Suche das heutige FCA-Spiel …";
+}
+function liveLine(g) {
+  if (!g.match || !g.match.id) return "Ohne Live-Daten: Wer es im Stadion sieht, tippt das Ergebnis an.";
+  if (LIVE.failed) return "Live-Ticker gerade nicht erreichbar. Wer es sieht, tippt das Ergebnis an.";
+  if (LIVE.ok) return `Live-Ticker zuletzt ${fmtTime(LIVE.ok)}. Schneller geht es per Knopf.`;
+  return "Live-Ticker wird abgefragt …";
+}
+// Drei kleine Punkte am Namen: richtig, daneben, offen
+function tipMarks(id) {
+  const g = tipGame();
+  if (!g || !g.tips[id] || !tipLocked(g)) return null;
+  const s = TP.scoreOf(g, id);
+  const wrap = h("span", "tmarks");
+  wrap.setAttribute("role", "img");
+  wrap.setAttribute("aria-label", `Tipps: ${s.right} richtig, ${s.wrong} daneben, ${s.open} offen`);
+  s.marks.forEach((m) => wrap.append(h("i", "tm tm-" + m)));
+  return wrap;
+}
+
+function renderTipBar() {
+  const bar = els.tippBar;
+  const g = tipGame();
+  const mode = viewMode();
+  const n = tipCount(g);
+  const locked = g ? tipLocked(g) : false;
+  const show = !!g && (mode === "idle" || mode === "spin") && !(locked && n === 0);
+  bar.hidden = !show;
+  if (!show) return;
+  bar.disabled = ui.spinning || ui.shooting || !!ui.sheetFor;
+  const m = g.match && g.match.id ? g.match : null;
+  els.tippMatch.textContent = m ? `gegen ${m.opp}` + (locked ? "" : ` · ${kickText(m.kickoff)}`) : "";
+  els.tippQs.replaceChildren();
+  let sub;
+  if (!locked) {
+    sub = n ? `${n} von ${Math.max(n, tipPeople(g).length)} haben getippt` : "Vor dem Anpfiff tippen";
+  } else {
+    const done = TP.QUESTIONS.filter((q) => g.results[q.id]).length;
+    sub = done === 3 ? "Alles entschieden" : `${done} von 3 entschieden`;
+    for (const q of TP.QUESTIONS) {
+      const r = g.results[q.id];
+      els.tippQs.append(h("i", "tq-dot" + (r ? (r.v === "void" ? " is-void" : " is-done") : "")));
+    }
+  }
+  els.tippSub.textContent = sub;
+  bar.classList.toggle("is-due", !locked && n === 0);
+}
+
+/* Tipp-Fenster */
+function openTipp() {
+  if (busyNow() || !els.revealSheet.hidden) return;
+  const g = ensureTipGame();
+  if (!g) return;
+  ui.tipDone = null;
+  ui.tipFor = null;
+  ui.tipDraft = null;
+  disarm();
+  els.tippSheet.hidden = false;
+  els.sheetBackdrop.hidden = false;
+  renderTipp();
+  els.tippSheet.scrollTop = 0;
+  pollLive(true);
+}
+function closeTipp() {
+  if (els.tippSheet.hidden) return;
+  els.tippSheet.hidden = true;
+  ui.tipFor = null;
+  ui.tipDraft = null;
+  disarm();
+  syncBackdrop();
+  renderAll(true);
+}
+function renderTipp() {
+  if (els.tippSheet.hidden) return;
+  const g = tipGame();
+  if (!g) { closeTipp(); return; }
+  const locked = tipLocked(g);
+  els.tippBody.replaceChildren();
+  els.tippActions.replaceChildren();
+  els.tippActions.className = "sheet-actions";
+  els.tippLabel.textContent = "Tippspiel";
+  if (ui.tipFor && locked) {
+    ui.tipFor = null;
+    ui.tipDraft = null;
+    toast("Anpfiff ist durch, die Tipps sind zu.");
+  }
+  if (ui.tipFor) renderTipForm(g);
+  else if (!locked) renderTipList(g);
+  else renderTipLive(g);
+}
+function renderTipList(g) {
+  els.tippTitle.textContent = "Wer tippt?";
+  els.tippNote.textContent = matchLine(g);
+  if (ui.tipDone) {
+    const ok = h("p", "tipp-ok");
+    ok.append(icon("i-check"), document.createTextNode(`${ui.tipDone} hat getippt. Handy weitergeben.`));
+    els.tippBody.append(ok);
+  }
+  const ul = h("ul", "tipp-people");
+  const people = tipPeople(g);
+  for (const p of people) {
+    const done = !!g.tips[p.id];
+    const li = h("li");
+    const b = h("button", "tipp-person" + (done ? " is-done" : ""));
+    b.type = "button";
+    b.style.setProperty("--c", p.color);
+    const st = h("span", "tipp-state");
+    if (done) st.append(icon("i-check"), document.createTextNode("getippt"));
+    else st.textContent = "Tippen";
+    b.append(h("span", "dot"), h("span", "player-name", p.name), st);
+    b.addEventListener("click", () => {
+      ui.tipDone = null;
+      ui.tipFor = p.id;
+      ui.tipDraft = { first: null, early: null, half: null };
+      disarm();
+      renderTipp();
+      els.tippSheet.scrollTop = 0;
+    });
+    li.append(b);
+    ul.append(li);
+  }
+  if (!people.length) ul.append(h("li", "empty", "Heute ist noch niemand als anwesend eingetragen."));
+  els.tippBody.append(ul);
+  els.tippBody.append(btn("link-btn tipp-who", "Fehlt jemand? Anwesenheit ändern", () => { closeTipp(); openPresence(openTipp); }));
+  els.tippBody.append(h("p", "caption", "Drei Fragen, immer dieselben. Jede richtige Antwort macht dein Feld auf dem Rad ein Viertel kleiner, jede falsche ein Viertel größer. Gilt den ganzen Abend."));
+  const ko = g.match && g.match.kickoff;
+  if (ko) {
+    els.tippBody.append(h("p", "caption", `Die Tipps schließen automatisch um ${fmtTime(ko + TP.LOCK_GRACE)}.`));
+    els.tippActions.className = "sheet-actions sheet-actions-single";
+    els.tippActions.append(btn("sheet-next", "Fertig", closeTipp));
+    return;
+  }
+  const key = "tipplock";
+  const armed = ui.armed === key;
+  const lock = btn("sheet-undo" + (armed ? " is-armed" : ""), armed ? "Wirklich zu?" : "Tipps zu", () => {
+    if (ui.armed !== key) { arm(key); renderTipp(); return; }
+    disarm();
+    g.locked = Date.now();
+    persist();
+    renderTipp();
+    renderGame(false);
+  });
+  els.tippActions.append(lock, btn("sheet-next", "Fertig", closeTipp));
+}
+function renderTipForm(g) {
+  const p = tipPerson(g, ui.tipFor);
+  const d = ui.tipDraft;
+  els.tippLabel.textContent = "Tippspiel · verdeckt";
+  els.tippTitle.textContent = p.name;
+  els.tippNote.textContent = "Nur du schaust hin. Die Tipps bleiben bis zum Anpfiff verdeckt.";
+  TP.QUESTIONS.forEach((q, i) => {
+    const box = h("div", "tq");
+    box.append(h("p", "tq-text", `${i + 1}. ${q.text}`));
+    const row = h("div", "tq-opts");
+    for (const v of q.opts) {
+      const b = btn("tq-opt", TP.optLabel(v, oppOf(g)), () => { d[q.id] = v; renderTipp(); });
+      b.setAttribute("aria-pressed", String(d[q.id] === v));
+      row.append(b);
+    }
+    box.append(row);
+    els.tippBody.append(box);
+  });
+  els.tippBody.append(h("p", "caption", "Fällt im ganzen Spiel kein Tor, zählt Frage 1 nicht. Unentschieden zur Pause heißt bei Frage 3 Nein."));
+  const ready = TP.QUESTIONS.every((q) => d[q.id]);
+  els.tippActions.append(
+    btn("sheet-undo", "Zurück", () => { ui.tipFor = null; ui.tipDraft = null; renderTipp(); }),
+    btn("sheet-next", "Tipp abgeben", () => submitTip(g, p), !ready)
+  );
+}
+function submitTip(g, p) {
+  if (tipLocked(g)) { ui.tipFor = null; renderTipp(); toast("Zu spät: Die Tipps sind schon zu."); return; }
+  const d = ui.tipDraft;
+  g.tips[p.id] = { first: d.first, early: d.early, half: d.half, at: Date.now(), name: p.name, color: p.color };
+  ui.tipFor = null;
+  ui.tipDraft = null;
+  ui.tipDone = p.name;
+  persist();
+  renderTipp();
+  renderTipBar();
+  els.tippSheet.scrollTop = 0;
+}
+const MANUAL_OPTS = {
+  first: [["fca", 0], ["opp", 0], ["void", 90]],
+  early: [["yes", 0], ["no", 30]],
+  half: [["yes", 45], ["no", 45]]
+};
+const MANUAL_LATER = { first: "„Kein Tor“ geht ab der 90. Minute.", early: "„Nein“ geht ab der 30. Minute.", half: "Geht ab der Halbzeit." };
+function renderTipLive(g) {
+  const done = TP.QUESTIONS.filter((q) => g.results[q.id]).length;
+  els.tippTitle.textContent = done === 3 ? "Alles entschieden" : "Läuft";
+  els.tippNote.textContent = (g.match && g.match.id ? matchLine(g) + ". " : "") + liveLine(g);
+  const now = Date.now();
+  const ko = g.match && g.match.kickoff;
+  const opp = oppOf(g);
+  const list = h("div", "tres-list");
+  TP.QUESTIONS.forEach((q, i) => {
+    const r = g.results[q.id];
+    const box = h("div", "tres" + (r ? " is-done" : ""));
+    const top = h("div", "tres-top");
+    top.append(h("span", "tres-q", `${i + 1}. ${q.text}`));
+    box.append(top);
+    if (r) {
+      top.append(h("span", "tres-v" + (r.v === "void" ? " is-void" : ""), TP.optLabel(r.v, opp)));
+      const meta = h("div", "tres-meta");
+      meta.append(h("span", null, (r.src === "live" ? "laut Live-Ticker" : "von Hand eingetragen") + `, ${fmtTime(r.at)}`));
+      meta.append(btn("link-btn", "Ändern", () => requireAdmin("Tipp-Auflösung ändern", () => clearResult(q.id))));
+      box.append(meta);
+      const ls = g.liveSays[q.id];
+      if (r.src === "manual" && ls && ls !== r.v) {
+        const hint = h("div", "tres-hint");
+        hint.append(h("span", null, `Live-Ticker meldet: ${TP.optLabel(ls, opp)}`),
+          btn("mini-btn ghost", "Übernehmen", () => requireAdmin("Live-Ergebnis übernehmen", () => setResult(q.id, ls, "live"))));
+        box.append(hint);
+      }
+    } else {
+      top.append(h("span", "tres-v is-open", "offen"));
+      const row = h("div", "tres-opts");
+      let later = false;
+      for (const [v, min] of MANUAL_OPTS[q.id]) {
+        const ok = !ko || now >= ko + min * 60000;
+        if (!ok) later = true;
+        row.append(btn("mini-btn ghost", v === "void" ? "Kein Tor" : TP.optLabel(v, opp), () => setResult(q.id, v, "manual"), !ok));
+      }
+      box.append(row);
+      if (later) box.append(h("p", "tres-note", MANUAL_LATER[q.id]));
+    }
+    list.append(box);
+  });
+  els.tippBody.append(list);
+
+  els.tippBody.append(h("h3", "kicker tipp-kicker", "Tipps und Feldgröße"));
+  const t = h("div", "table tipp-table");
+  const head = h("div", "tt-row tt-head");
+  head.append(h("span", null, "Spieler"), ...TP.QUESTIONS.map((q) => h("span", null, q.short)), h("span", null, "Feld"));
+  t.append(head);
+  const tippers = Object.keys(g.tips).map((pid) => tipPerson(g, pid))
+    .sort((a, b) => TP.weightOf(g, a.id) - TP.weightOf(g, b.id) || a.name.localeCompare(b.name, "de"));
+  for (const p of tippers) {
+    const s = TP.scoreOf(g, p.id);
+    const tip = g.tips[p.id];
+    const row = h("div", "tt-row");
+    row.append(whoCell(p));
+    TP.QUESTIONS.forEach((q, i) => {
+      const v = tip[q.id];
+      row.append(h("span", "tt-cell tt-" + s.marks[i], v === "opp" ? "Geg." : TP.optLabel(v)));
+    });
+    const w = TP.weightOf(g, p.id);
+    row.append(h("span", "num tt-w" + (w < 1 ? " plus" : w > 1 ? " minus" : ""), fieldPct(w)));
+    t.append(row);
+  }
+  els.tippBody.append(t);
+  const none = tipPeople(g).filter((p) => !g.tips[p.id]);
+  if (none.length) els.tippBody.append(h("p", "caption", `Ohne Tipp, Feld bleibt normal: ${none.map((p) => p.name).join(", ")}.`));
+  els.tippBody.append(h("p", "caption", "100 % ist ein normales Feld. Jede richtige Antwort nimmt ein Viertel weg, jede falsche legt ein Viertel drauf. Die Chance, gezogen zu werden, entspricht der Feldgröße."));
+  els.tippActions.className = "sheet-actions sheet-actions-single";
+  els.tippActions.append(btn("sheet-next", "Fertig", closeTipp));
+}
+function setResult(qid, v, src) {
+  const g = tipGame();
+  if (!g) return;
+  const prev = g.results[qid];
+  if (prev && prev.v === v && prev.src === src) return;
+  ui.lastManual = src === "manual" ? { qid, prev: prev ? { ...prev } : null, prevSeen: g.seen[qid], prevLocked: g.locked } : null;
+  g.results[qid] = { v, at: Date.now(), src };
+  if (!g.locked) g.locked = Date.now();
+  persist();
+  queueReveal(qid);
+  renderTipp();
+  renderTipBar();
+  renderChrome();
+  maybeReveal();
+}
+function clearResult(qid) {
+  const g = tipGame();
+  if (!g) return;
+  delete g.results[qid];
+  delete g.seen[qid];
+  persist();
+  toast("Frage ist wieder offen. Jetzt das richtige Ergebnis antippen.");
+  renderAll(true);
+}
+
+/* Auflösung anzeigen */
+function queueReveal(qid) {
+  if (!ui.reveals.includes(qid)) ui.reveals.push(qid);
+}
+const revealBlocked = () => ui.spinning || ui.shooting || !!ui.sheetFor || !els.revealSheet.hidden ||
+  !els.presenceSheet.hidden || !els.compSheet.hidden || !els.pinSheet.hidden || (!els.tippSheet.hidden && !!ui.tipFor);
+function maybeReveal() {
+  const g = tipGame();
+  if (!g) { ui.reveals = []; return; }
+  if (revealBlocked()) return;
+  // auch Auflösungen, die noch nie gezeigt wurden (z. B. weil die App zu war)
+  for (const q of TP.QUESTIONS) {
+    const r = g.results[q.id];
+    if (r && g.seen[q.id] !== r.v) queueReveal(q.id);
+  }
+  while (ui.reveals.length) {
+    const qid = ui.reveals.shift();
+    const r = g.results[qid];
+    if (!r || g.seen[qid] === r.v) continue;
+    openReveal(g, qid);
+    return;
+  }
+}
+function revealGroup(title, people, cls, iconId, delta) {
+  const box = h("div", "rv-group " + cls);
+  box.append(h("p", "rv-head", title));
+  if (!people.length) {
+    box.append(h("p", "rv-empty", "niemand"));
+    return box;
+  }
+  const ul = h("ul", "rv-list");
+  for (const p of people) {
+    const li = h("li");
+    li.style.setProperty("--c", p.color);
+    li.append(icon(iconId, "rv-ico"), h("span", "dot"), h("span", "rv-name", p.name), h("span", "rv-w", delta));
+    ul.append(li);
+  }
+  box.append(ul);
+  return box;
+}
+function openReveal(g, qid) {
+  const r = g.results[qid];
+  const qi = TP.QUESTIONS.findIndex((q) => q.id === qid);
+  const correction = g.seen[qid] != null && g.seen[qid] !== r.v;
+  g.seen[qid] = r.v;
+  persist();
+  ui.revealing = { qid };
+  els.revealLabel.textContent = correction ? `Korrektur · Frage ${qi + 1}` : `Tippspiel · Frage ${qi + 1} von 3`;
+  els.revealTitle.textContent = TP.resultText(qid, r.v, oppOf(g));
+  els.revealSrc.textContent = (r.src === "live" ? "Laut Live-Ticker" : "Von Hand eingetragen") + `, ${fmtTime(r.at)} Uhr`;
+  const body = els.revealBody;
+  body.replaceChildren();
+  const tippers = Object.keys(g.tips).map((pid) => tipPerson(g, pid));
+  if (r.v === "void") {
+    body.append(h("p", "rv-void", "Diese Frage zählt nicht. Kein Feld ändert sich."));
+  } else {
+    const right = tippers.filter((p) => g.tips[p.id][qid] === r.v);
+    const wrong = tippers.filter((p) => g.tips[p.id][qid] !== r.v);
+    body.append(
+      revealGroup("Richtig · Feld wird kleiner", right, "is-right", "i-check", `\u2212${Math.round(TP.STEP * 100)}\u00a0%`),
+      revealGroup("Daneben · Feld wird größer", wrong, "is-wrong", "i-cross", `+${Math.round(TP.STEP * 100)}\u00a0%`)
+    );
+  }
+  const acts = els.revealActions;
+  acts.replaceChildren();
+  const more = ui.reveals.some((x) => g.results[x] && g.seen[x] !== g.results[x].v);
+  const canTakeBack = r.src === "manual" && ui.lastManual && ui.lastManual.qid === qid;
+  acts.className = "sheet-actions" + (canTakeBack ? "" : " sheet-actions-single");
+  if (canTakeBack) acts.append(btn("sheet-undo", "Doch nicht", takeBackManual));
+  acts.append(btn("sheet-next", more ? "Nächste" : ui.tab === "game" && els.tippSheet.hidden ? "Zum Rad" : "Weiter", closeReveal));
+  els.revealSheet.hidden = false;
+  els.sheetBackdrop.hidden = false;
+  els.revealSheet.scrollTop = 0;
+  sting();
+  buzz([30, 50, 30]);
+}
+function closeReveal() {
+  if (els.revealSheet.hidden) return;
+  els.revealSheet.hidden = true;
+  ui.revealing = null;
+  syncBackdrop();
+  renderAll(true);   // jetzt wachsen/schrumpfen die Felder sichtbar
+}
+function takeBackManual() {
+  const g = tipGame();
+  const lm = ui.lastManual;
+  if (!g || !lm) return;
+  if (lm.prev) g.results[lm.qid] = lm.prev;
+  else delete g.results[lm.qid];
+  if (lm.prevSeen) g.seen[lm.qid] = lm.prevSeen;
+  else delete g.seen[lm.qid];
+  g.locked = lm.prevLocked;
+  ui.lastManual = null;
+  ui.reveals = ui.reveals.filter((x) => x !== lm.qid);
+  persist();
+  closeReveal();
+  toast("Zurückgenommen.");
+}
+
+/* Live-Daten: OpenLigaDB */
+const LIVE = { busy: false, last: 0, ok: 0, failed: false };
+async function getJson(path) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 9000);
+  try {
+    const res = await fetch(TP.API + path, { signal: ctrl.signal, cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+// Fragt höchstens einmal pro Minute ab: das heutige FCA-Spiel suchen, ab Anpfiff den Stand holen
+async function pollLive(force) {
+  const g = tipGame();
+  if (!g || LIVE.busy || document.visibilityState !== "visible") return;
+  const now = Date.now();
+  const m = g.match;
+  const needSearch = !m || (!m.id && (!m.searched || now - m.searched > 15 * 60000));
+  const needData = !!(m && m.id && tipCount(g) && m.kickoff && now >= m.kickoff && now <= m.kickoff + 150 * 60000);
+  if (!needSearch && !needData) return;
+  if (now - LIVE.last < (force ? 15000 : 55000)) return;
+  LIVE.busy = true;
+  LIVE.last = now;
+  try {
+    if (needSearch) {
+      let found = null;
+      for (const lg of TP.LEAGUES) {
+        found = TP.pickMatch(await getJson(`/getmatchdata/${lg}`), dayStart(), dayStart() + 864e5);
+        if (found) break;
+      }
+      g.match = found ? TP.matchMeta(found, Date.now())
+        : { id: null, kickoff: null, team1: "", team2: "", opp: "", fcaFirst: true, searched: Date.now() };
+      if (found) takeLive(g, found);
+    } else {
+      const raw = await getJson(`/getmatchdata/${m.id}`);
+      const one = TP.readMatch(Array.isArray(raw) ? raw[0] : raw);
+      if (one) {
+        g.match = TP.matchMeta(one, m.searched || Date.now());
+        takeLive(g, one);
+      }
+    }
+    LIVE.ok = Date.now();
+    LIVE.failed = false;
+  } catch (e) {
+    LIVE.failed = true;
+  } finally {
+    LIVE.busy = false;
+    persist();
+    if (tipGame() === g) {
+      renderTipBar();
+      renderChrome();
+      if (!els.tippSheet.hidden && !ui.tipFor) renderTipp();
+      maybeReveal();
+    }
+  }
+}
+function takeLive(g, m) {
+  if (!tipCount(g)) return;   // ohne Tipps gibt es nichts aufzulösen
+  TP.applyLive(g, TP.evaluate(m, Date.now()), Date.now()).forEach(queueReveal);
+}
+// Regelmäßig: Live-Daten, automatische Tipp-Sperre zum Anpfiff, ausstehende Auflösungen
+setInterval(() => {
+  if (document.visibilityState !== "visible" || !tippOn()) return;
+  ensureTipGame();
+  pollLive(false);
+  renderTipBar();
+  if (!els.tippSheet.hidden && !ui.tipFor) renderTipp();
+  if (!ui.spinning && !ui.shooting) renderChrome();
+  maybeReveal();
+}, 20000);
+
 /* ---------- Bereiche ---------- */
 const views = { game: $("view-game"), stats: $("view-stats"), squad: $("view-squad") };
 function switchTab(tab) {
@@ -1877,6 +2422,7 @@ function switchTab(tab) {
 }
 function renderAll(animate) {
   renderGame(animate);
+  if (!els.tippSheet.hidden) renderTipp();
   if (ui.tab === "stats") renderStats();
   if (ui.tab === "squad") renderSquad();
 }
@@ -1891,6 +2437,11 @@ els.sheetNext.addEventListener("click", sheetNext);
 els.sheetUndo.addEventListener("click", () => requireAdmin("Rückgängig", undoLast));
 function closeTopSheet() {
   if (!els.pinSheet.hidden) closePin();
+  else if (!els.revealSheet.hidden) closeReveal();
+  else if (!els.tippSheet.hidden) {
+    if (ui.tipFor) { ui.tipFor = null; ui.tipDraft = null; renderTipp(); }
+    else closeTipp();
+  }
   else if (!els.compSheet.hidden) closeComp();
   else if (!els.presenceSheet.hidden) closePresence(false);
   else if (ui.sheetFor) sheetNext();
@@ -1918,10 +2469,10 @@ document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () 
   switchTab(b.dataset.tab);
 }));
 els.champPill.addEventListener("click", () => { if (!ui.spinning && !ui.shooting) switchTab("stats"); });
+els.tippBar.addEventListener("click", openTipp);
 els.rangeToday.addEventListener("click", () => { ui.range = "today"; renderStats(); });
 els.rangeSeason.addEventListener("click", () => { ui.range = "season"; renderStats(); });
 els.rangeAll.addEventListener("click", () => { ui.range = "all"; renderStats(); });
-els.seasonSel.addEventListener("change", () => { ui.seasonStart = Number(els.seasonSel.value); renderSaldo(); });
 els.addForm.addEventListener("submit", (e) => {
   e.preventDefault();
   if (addPlayer(els.nameInput.value, ui.addAsGuest, false)) els.nameInput.value = "";
@@ -1956,6 +2507,7 @@ function resetStats() {
   state.round = null;
   state.pending = [];
   state.debts = [];
+  state.tippArchive = [];
   ui.finalLine = null;
   ui.playingId = null;
   ui.champRoundId = null;
@@ -1982,6 +2534,7 @@ if (state.round && state.round.final && state.round.final.winner && !state.round
   persist();
 }
 renderAll(false);
+pollLive(true);
 if (document.fonts && document.fonts.ready) {
   document.fonts.ready.then(() => {
     ui.wheelSig = "";

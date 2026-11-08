@@ -1,6 +1,6 @@
 # Anforderungen – FCA Bier-Roulette
 
-Stand: 07.11.2026 · Auftraggeber: Daniel · Einsatz: im Stadion während FCA-Spielen, am Handy
+Stand: 08.11.2026 · Auftraggeber: Daniel · Einsatz: im Stadion während FCA-Spielen, am Handy
 
 Legende: `[x]` umgesetzt · `[ ]` offen
 
@@ -48,6 +48,7 @@ Legende: `[x]` umgesetzt · `[ ]` offen
 - [x] **C3 Spielerfarben:** Farbe im Rad = Farbe in allen Listen; Ergebnisfeld in der Farbe des Bierholers.
 - [x] **C4 Beschriftung:** Knopf „Saufen?“, Ergebnis „Bierholer:“.
 - [x] **C5 Stadion-Optik:** Rasen, Flutlicht, Vereinsfarben.
+- [x] **C6 Saison-Auswahl im Bier-Saldo:** schlanke Umschalter wie bei Heute/Saison/Gesamt; bei nur einer Saison steht nur „Saison 2026/27“ da (vorher graues Auswahlfeld, das bei einer Saison scheinbar nichts tat).
 
 ## D – Technik und Betrieb
 
@@ -67,11 +68,15 @@ Legende: `[x]` umgesetzt · `[ ]` offen
 - [x] **E6 Offene Bierschulden** mit Datum und Grund, einlösbar auch in der Statistik.
 - [x] **E7 Biertempo:** Heute: Anzahl Biere, Ø Takt, Bestzeit, Zeitleiste in Spielerfarben. Saison: schnellstes Bier, längste Durststrecke, Ø Takt. Gezählt wird nur am selben Abend.
 
-## Live-Ticker (Vorschlag, noch nicht beauftragt)
+## F – Tippspiel (beauftragt 08.11.2026)
 
-- Datenquelle: OpenLigaDB (kostenlos, ohne Schlüssel, aus dem Browser abrufbar, von Freiwilligen gepflegt; Tore mit Minute). Verzögerung möglich, im Stadion ist man schneller.
-- Darum zweigleisig: Knöpfe „Tor FCA“ / „Gegentor“ für sofort, Live-Daten für Spielstand, Minute und Gegner.
-- Spielideen: Gegentor = Frustdreh (sofort ein Extra-Bier), FCA-Tor = Joker für den zuletzt Gezogenen, Spielstand und Minute im Ticker, Tippspiel vor Anpfiff.
+- [x] **F1 Drei feste Fragen**, früh im Spiel entschieden: „Wer trifft zuerst?“ (FCA / Gegner; fällt kein Tor, zählt die Frage nicht), „Fällt ein Tor bis zur 30. Minute?“ (Ja / Nein, egal welches Team), „Führt der FCA zur Halbzeit?“ (Ja / Nein, Unentschieden = Nein). Die Frage nach der ersten Gelben Karte wurde durch die Halbzeit-Frage ersetzt, weil Karten in den kostenlosen Live-Daten fehlen.
+- [x] **F2 Verdeckt tippen:** Leiste „Tippspiel“ unter den Namen. Jeder Anwesende tippt für sich, dann geht das Handy weiter. Die Tipps schließen 3 Minuten nach Anpfiff (mit Live-Daten automatisch, sonst über „Tipps zu“).
+- [x] **F3 Wirkung aufs Rad:** Jede richtige Antwort macht das eigene Feld ein Viertel kleiner, jede falsche ein Viertel größer (25 % bis 175 %). Feldgröße = Wahrscheinlichkeit, gezogen zu werden. Gilt den ganzen Abend; ohne Tipp bleibt das Feld normal. Das Finale (Elfmeterschießen) ist davon nicht betroffen.
+- [x] **F4 Automatisch auflösen** über OpenLigaDB: Die App sucht das heutige FCA-Spiel in der 1. und 2. Liga und fragt ab Anpfiff einmal pro Minute den Stand ab. „Kein Tor bis zur 30.“ frühestens 42 Minuten nach Anpfiff, Halbzeit frühestens nach 50 Minuten (Puffer für spätes Eintragen). Pokal- und Testspiele stehen dort nicht, dann per Knopf.
+- [x] **F5 Per Knopf auflösen:** Wer es im Stadion sieht, tippt das Ergebnis an (schneller als der Live-Ticker). Sperren: „Nein“ bei Frage 2 ab der 30. Minute, Frage 3 ab der Halbzeit, „Kein Tor“ ab der 90. Minute. Direkt danach „Doch nicht“ möglich; später ändern nur mit Admin-PIN. Melden die Live-Daten etwas anderes als von Hand eingetragen, erscheint ein Hinweis mit „Übernehmen“.
+- [x] **F6 Sofort sichtbar:** Bei jeder Auflösung ein Fenster: Ergebnis, wer richtig lag (Feld −25 %) und wer daneben (Feld +25 %). Danach wachsen und schrumpfen die Felder sichtbar. An jedem Namen drei Punkte (grün richtig, rot daneben, leer offen), in der Leiste „x von 3 entschieden“, im Ticker die Risiko-Spanne. Im Tipp-Fenster eine Tabelle mit allen Tipps und Feldgrößen.
+- [x] **F7 Nur bei Meisterschaften mit „FCA-Spieltag“.** Frühere Tippspiele werden gespeichert (für eine spätere Statistik).
 
 ## Ideen-Speicher (noch nicht beauftragt)
 
@@ -84,3 +89,5 @@ Legende: `[x]` umgesetzt · `[ ]` offen
 | Abzeichen und Saisonwertung (Hattrick, Bierholer des Monats) | Langzeitspaß | mittel |
 | Mehrere Gruppen mit eigener Statistik | weitere Runden | mittel |
 | Live-Daten zum FCA (Tabellenplatz, nächster Gegner) | Gesprächsstoff | mittel |
+| Tippkönig: Trefferquote im Tippspiel pro Saison (Daten werden schon gesammelt) | Langzeitspaß | klein |
+| Stärke im Tippspiel einstellbar (z. B. ein Fünftel statt ein Viertel) | Feintuning | klein |

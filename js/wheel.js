@@ -1,6 +1,8 @@
 // Das Glücksrad: zeichnen, drehen und die Zeiger-Mathematik.
 //
-// Winkel werden im Uhrzeigersinn ab 12 Uhr gemessen. Segment i belegt [i*seg, (i+1)*seg).
+// Winkel werden im Uhrzeigersinn ab 12 Uhr gemessen. Ohne Gewichte belegt Segment i [i*seg, (i+1)*seg).
+// Mit Gewichten (Tippspiel) ist jedes Segment so groß wie sein Anteil an der Summe aller Gewichte;
+// genau dieser Anteil ist auch die Wahrscheinlichkeit, gezogen zu werden.
 // Ist das Rad um `rotation` Grad im Uhrzeigersinn gedreht, steht unter dem Zeiger (oben)
 // der Radwinkel (-rotation) mod 360.
 
@@ -8,6 +10,7 @@ const NS = "http://www.w3.org/2000/svg";
 export const C = 200;
 export const R = 168;
 const BULBS = 24;
+const MORPH_MS = 950;
 
 export function polar(r, deg) {
   const a = (deg * Math.PI) / 180;
@@ -23,18 +26,60 @@ export function segPath(a0, a1, r = R) {
   return `M${C} ${C} L${x0.toFixed(2)} ${y0.toFixed(2)} A${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)} Z`;
 }
 
-export function indexAtPointer(rotation, n) {
+function cleanWeights(n, weights) {
+  if (!weights || weights.length !== n) return new Array(n).fill(1);
+  return weights.map((w) => (isFinite(w) && w > 0 ? w : 1));
+}
+
+// Grenzen der Segmente in Grad: n+1 Werte von 0 bis 360
+export function segBounds(n, weights) {
+  const w = cleanWeights(n, weights);
+  const sum = w.reduce((a, b) => a + b, 0);
+  const out = [0];
+  let acc = 0;
+  for (let i = 0; i < n; i++) {
+    acc += w[i];
+    out.push(i === n - 1 ? 360 : (acc / sum) * 360);
+  }
+  return out;
+}
+
+export function indexAtPointer(rotation, n, weights) {
   const phi = ((-rotation % 360) + 360) % 360;
-  return Math.floor(phi / (360 / n)) % n;
+  if (!weights) return Math.floor(phi / (360 / n)) % n;
+  const b = segBounds(n, weights);
+  for (let i = 0; i < n; i++) if (phi < b[i + 1]) return i;
+  return n - 1;
 }
 
 // Zielrotation, bei der das Segment `idx` unter dem Zeiger stehen bleibt.
 // Der Haltepunkt liegt zufällig im inneren Bereich des Segments, nie auf einer Kante.
-export function targetRotation(current, idx, n, rnd, turns) {
-  const seg = 360 / n;
-  const phi = (idx + 0.12 + 0.76 * rnd()) * seg;
+export function targetRotation(current, idx, n, rnd, turns, weights) {
+  let a0, a1;
+  if (weights) {
+    const b = segBounds(n, weights);
+    a0 = b[idx];
+    a1 = b[idx + 1];
+  } else {
+    const seg = 360 / n;
+    a0 = idx * seg;
+    a1 = a0 + seg;
+  }
+  const phi = a0 + (0.12 + 0.76 * rnd()) * (a1 - a0);
   const base = (((-phi - current) % 360) + 360) % 360;
   return current + turns * 360 + base;
+}
+
+// Zieht einen Index mit Wahrscheinlichkeit proportional zum Gewicht (r: Zufallszahl 0 bis 1)
+export function weightedIndex(weights, r) {
+  const w = cleanWeights(weights.length, weights);
+  const sum = w.reduce((a, b) => a + b, 0);
+  let x = r * sum;
+  for (let i = 0; i < w.length; i++) {
+    x -= w[i];
+    if (x < 0) return i;
+  }
+  return w.length - 1;
 }
 
 function el(tag, attrs = {}) {
@@ -78,15 +123,91 @@ export function createWheel(svg, { logoHref }) {
 
   let rotation = 0;
   let players = [];
+  let weights = [];       // gültige Gewichte (Zeiger-Mathematik und Ziel jeder Bewegung)
+  let shown = [];         // gerade gezeichnete Gewichte (weichen während einer Bewegung ab)
+  let segEls = [], labelEls = [], baseFs = [];
+  let morphRaf = 0;
 
   function apply() {
     rotor.setAttribute("transform", `rotate(${rotation.toFixed(3)} ${C} ${C})`);
   }
 
-  function draw(list, emptyText) {
-    players = list.slice();
-    rotor.replaceChildren();
+  // Segmente und Beschriftungen für die Gewichte `ws` setzen
+  function layout(ws) {
+    shown = ws.slice();
     const n = players.length;
+    const b = segBounds(n, ws);
+    for (let i = 0; i < n; i++) {
+      segEls[i].setAttribute("d", segPath(b[i], b[i + 1]));
+      const mid = (b[i] + b[i + 1]) / 2;
+      const span = ((b[i + 1] - b[i]) * Math.PI) / 180;
+      const [x, y] = polar(R * 0.6, mid);
+      const rot = n === 1 ? 0 : mid <= 180 ? mid - 90 : mid + 90;
+      // Schmale Felder: Schrift so klein, dass sie ins Feld passt
+      const fs = Math.max(8, Math.min(baseFs[i], span * R * 0.5));
+      const t = labelEls[i];
+      t.setAttribute("x", x.toFixed(2));
+      t.setAttribute("y", y.toFixed(2));
+      t.setAttribute("font-size", fs.toFixed(1));
+      t.setAttribute("transform", `rotate(${rot.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)})`);
+    }
+  }
+
+  function stopMorph() {
+    if (!morphRaf) return;
+    cancelAnimationFrame(morphRaf);
+    morphRaf = 0;
+    layout(weights);
+  }
+
+  function morph(from, to) {
+    if (morphRaf) cancelAnimationFrame(morphRaf);
+    const t0 = performance.now();
+    const frame = (now) => {
+      const t = Math.min(1, (now - t0) / MORPH_MS);
+      const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      layout(from.map((w, i) => w + (to[i] - w) * e));
+      if (t < 1) { morphRaf = requestAnimationFrame(frame); return; }
+      morphRaf = 0;
+      layout(to);
+    };
+    morphRaf = requestAnimationFrame(frame);
+  }
+
+  // list: [{id, name, color, absent, w}] – w ist das Gewicht (Feldgröße), Standard 1.
+  // opts.morph: Bleiben dieselben Spieler und ändern sich nur die Gewichte, wachsen/schrumpfen die Felder sichtbar.
+  function draw(list, emptyText, opts = {}) {
+    const key = (l) => l.map((p) => p.id + "\u0001" + p.name).join("|");
+    const prevKey = key(players);
+    const next = list.slice();
+    const n = next.length;
+    const newW = next.map((p) => (isFinite(p.w) && p.w > 0 ? p.w : 1));
+    const sameIds = n > 1 && prevKey === key(next) && segEls.length === n;
+    if (sameIds) {
+      players = next;
+      players.forEach((p, i) => {
+        segEls[i].style.fill = p.color;
+        segEls[i].classList.toggle("is-absent", !!p.absent);
+        labelEls[i].classList.toggle("is-absent", !!p.absent);
+      });
+      const changed = newW.some((w, i) => Math.abs(w - weights[i]) > 1e-6);
+      weights = newW;
+      if (!changed) return;
+      if (opts.morph) {
+        morph(shown.slice(), newW);
+      } else {
+        if (morphRaf) { cancelAnimationFrame(morphRaf); morphRaf = 0; }
+        layout(newW);
+      }
+      return;
+    }
+    stopMorph();
+    players = next;
+    weights = newW;
+    rotor.replaceChildren();
+    segEls = [];
+    labelEls = [];
+    baseFs = [];
     if (n === 0) {
       rotor.append(el("circle", { cx: C, cy: C, r: R, class: "wheel-empty" }));
       const t = el("text", { x: C, y: C + 84, class: "wheel-empty-text", "text-anchor": "middle" });
@@ -95,32 +216,31 @@ export function createWheel(svg, { logoHref }) {
       apply();
       return;
     }
-    const seg = 360 / n;
-    players.forEach((p, i) => {
-      const path = el("path", { d: segPath(i * seg, (i + 1) * seg), class: "wheel-seg" + (p.absent ? " is-absent" : ""), "data-id": p.id });
+    players.forEach((p) => {
+      const path = el("path", { class: "wheel-seg" + (p.absent ? " is-absent" : ""), "data-id": p.id });
       path.style.fill = p.color;
       rotor.append(path);
+      segEls.push(path);
     });
-    players.forEach((p, i) => {
-      const mid = (i + 0.5) * seg;
-      const [x, y] = polar(R * 0.6, mid);
-      const rot = n === 1 ? 0 : mid <= 180 ? mid - 90 : mid + 90;
+    const room = R * 0.6;
+    players.forEach((p) => {
       let fs = n <= 3 ? 28 : n <= 5 ? 25 : n === 6 ? 23 : n <= 8 ? 20 : n <= 10 ? 17 : 15;
-      const room = R * 0.6;
       if (p.name.length * fs * 0.5 > room) fs = Math.max(11, room / (p.name.length * 0.5));
       const t = el("text", {
-        x: x.toFixed(2), y: y.toFixed(2), class: "wheel-label" + (p.absent ? " is-absent" : ""),
-        "text-anchor": "middle", "dominant-baseline": "central", "font-size": fs.toFixed(1),
-        transform: `rotate(${rot.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)})`
+        class: "wheel-label" + (p.absent ? " is-absent" : ""), "text-anchor": "middle", "dominant-baseline": "central",
+        "font-size": fs.toFixed(1), x: C, y: C
       });
       t.textContent = p.name;
       rotor.append(t);
       // Tatsächliche Breite messen (Schrift kann breiter sein als geschätzt) und notfalls verkleinern
       try {
         const len = t.getComputedTextLength();
-        if (len > room) t.setAttribute("font-size", Math.max(10, (fs * room) / len).toFixed(1));
+        if (len > room) fs = Math.max(10, (fs * room) / len);
       } catch (e) { /* Rad gerade unsichtbar: Schätzung genügt */ }
+      labelEls.push(t);
+      baseFs.push(fs);
     });
+    layout(weights);
     apply();
   }
 
@@ -137,20 +257,22 @@ export function createWheel(svg, { logoHref }) {
   // Dreht so, dass Segment `idx` unter dem Zeiger landet. Gibt den Index zurück,
   // der nach dem Stillstand wirklich unter dem Zeiger steht.
   function spinTo(idx, { rnd, duration, turns, onTick, reduceMotion }) {
+    stopMorph();
     const n = players.length;
+    const ws = weights.slice();
     const from = rotation;
-    const target = targetRotation(from, idx, n, rnd, turns);
+    const target = targetRotation(from, idx, n, rnd, turns, ws);
     svg.classList.remove("is-celebrating");
     if (!reduceMotion) svg.classList.add("is-spinning");
     return new Promise((resolve) => {
-      let last = indexAtPointer(from, n);
+      let last = indexAtPointer(from, n, ws);
       const t0 = performance.now();
       const frame = (now) => {
         const t = Math.min(1, (now - t0) / duration);
         const e = 1 - Math.pow(1 - t, 4);
         rotation = from + (target - from) * e;
         apply();
-        const cur = indexAtPointer(rotation, n);
+        const cur = indexAtPointer(rotation, n, ws);
         if (cur !== last) {
           last = cur;
           if (onTick) onTick();
@@ -165,7 +287,7 @@ export function createWheel(svg, { logoHref }) {
         rotation = ((target % 360) + 360) % 360;
         apply();
         svg.classList.remove("is-spinning");
-        resolve(indexAtPointer(rotation, n));
+        resolve(indexAtPointer(rotation, n, ws));
       };
       requestAnimationFrame(frame);
     });
@@ -178,5 +300,9 @@ export function createWheel(svg, { logoHref }) {
     svg.classList.add("is-celebrating");
   }
 
-  return { draw, spinTo, highlight, celebrate, get players() { return players; } };
+  return {
+    draw, spinTo, highlight, celebrate, stopMorph,
+    get players() { return players; },
+    get weights() { return weights.slice(); }
+  };
 }

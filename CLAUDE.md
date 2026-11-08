@@ -15,7 +15,7 @@
 - **Mobile first.** Jede Änderung zuerst bei 360–430 px Breite prüfen. Bedienelemente im Daumenbereich unten, Mindestgröße 44 px.
 - **Keine Emojis** in der Oberfläche. Symbole als eigenes SVG.
 - **Beschriftungen bleiben:** Knopf „Saufen?“, Ergebnis „Bierholer:“, Titel „FCA Bier-Roulette Champion“.
-- **Gewinnerlogik nicht anfassen**, ohne sie zu testen: angezeigt wird immer das Segment unter dem Zeiger (`js/wheel.js`, `indexAtPointer` und `targetRotation`). Diese Stelle war früher fehlerhaft.
+- **Gewinnerlogik nicht anfassen**, ohne sie zu testen: angezeigt wird immer das Segment unter dem Zeiger (`js/wheel.js`, `indexAtPointer`, `targetRotation`, `segBounds`). Diese Stelle war früher fehlerhaft. Seit dem Tippspiel sind die Felder unterschiedlich groß: gezogen wird mit `weightedIndex` (Chance = Feldgröße), das Rad landet im inneren Bereich dieses Feldes. Geprüft mit 200.000 simulierten Drehungen und Zeiger-Abgleich im Browser.
 - Spielerfarbe im Rad = Farbe in allen Listen und im Ergebnisfeld.
 - Das FCA-Wappen (`assets/fca-logo.png`) ist eine geschützte Marke. Nur in der Radmitte verwenden, nicht als App-Symbol, und die App nie als offizielle Vereins-App ausgeben.
 
@@ -37,6 +37,7 @@
 | `js/shootout.js` | Regeln des Elfmeterschießens |
 | `js/store.js` | Speichern auf dem Gerät (localStorage), Datenmodell, Standard-Kader |
 | `js/content.js` | Sprüche, FCA-Fakten, Ergebnistexte |
+| `js/tipp.js` | Tippspiel: Fragen, Feldgrößen, Auswertung der Live-Daten (OpenLigaDB), ohne Oberfläche |
 
 ### Datenmodell (`js/store.js`)
 
@@ -52,6 +53,7 @@ Gespeichert wird ein Objekt `{version: 2, activeId, competitions, settings, admi
 - `debts`: Bierschulden `{id, playerId, at, roundId, reason: pick|forfeit, name, color, settledAt, beers}`.
 - Biertempo: `beerLog` (alle wirklich geholten Biere mit Zeit) und `gapsOf` (Abstände am selben Abend) speisen Ticker, Ergebnis und Statistik.
 - `beers` = Anzahl Anwesender (Mitspieler) im Moment des Holens. Daraus rechnet die Statistik den Bier-Saldo pro Saison (Juli–Juni): geholte Biere minus Saisonschnitt × Anzahl.
+- `tipp`: Tippspiel des Abends `{day, match, tips, results, liveSays, locked, seen}`, `tippArchive`: frühere mit Tipps (max. 60). Regeln und Prüfung in `js/tipp.js` (`normGame`, `weightOf`, `evaluate`, `applyLive`). Feldgröße pro Spieler: 1 ± 0,25 je Frage, mindestens 0,25. Ergebnisse haben `src: live|manual`; Live-Daten überschreiben nie von Hand Eingetragenes.
 - Kader-Änderungen wirken sofort: neue Stammspieler kommen in den `pot` der laufenden Runde (`joinRound`), ausgeschaltete oder gelöschte verlassen ihn ohne Schuld (`leaveRound`, gesperrt für Finalisten und die letzten zwei: `leaveBlocker`). Im Finale gelten Neue erst ab der nächsten Runde.
 
 ### Spielregeln bei Fehlenden und Gästen
@@ -60,6 +62,13 @@ Gespeichert wird ein Objekt `{version: 2, activeId, competitions, settings, admi
 - Finale mit Fehlendem: Auswahl „Nächstes Mal nachholen“ (→ `pending`, neue Runde startet) oder „kampflos“ (Fehlender verliert, Schuld).
 - Gäste spielen kein Finale: Sind nur noch zwei Stammspieler übrig und noch Gäste im Topf, ist „Gastrunde“ (nur Gäste auf dem Rad, `isGuestRound`). Das Finale startet erst, wenn `finalDue` gilt.
 - Diese Regeln sind mit Daniel abgestimmt (07.11.2026); Änderungen nur nach Rücksprache.
+
+### Tippspiel und Live-Daten
+
+- Quelle: OpenLigaDB, `https://api.openligadb.de/getmatchdata/bl1` (aktueller Spieltag, danach `bl2`), dann `getmatchdata/{matchID}` einmal pro Minute ab Anpfiff bis 150 Minuten danach. Kein Schlüssel nötig, aus dem Browser erlaubt. FC Augsburg hat dort `teamId` 95. Halbzeitstand: `matchResults` mit `resultTypeID` 1.
+- Keine Kartendaten. Deshalb ist die Frage „Gelbe Karte“ durch „Führt der FCA zur Halbzeit?“ ersetzt (mit Daniel abgestimmt, 08.11.2026).
+- Aus der Claude-Umgebung ist OpenLigaDB gesperrt. Getestet wird mit nachgestellten Antworten (Playwright `route`). Echte Daten zeigen sich erst am Spieltag.
+- Auflösungen erscheinen als eigenes Fenster (`revealSheet`); das Rad wächst/schrumpft erst nach dem Schließen (`ui.revealing` hält `syncWheel` an).
 
 ## Lokal testen
 

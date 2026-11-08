@@ -22,6 +22,13 @@ Wer holt das nächste Bier? Das Glücksrad für unsere FCA-Runde im Stadion.
 - Oben links auf den Namen tippen: Dort wechselst du zwischen Meisterschaften (z. B. FCA-Spieltage, Vatertagstour) oder legst neue an. Jede hat eigenen Kader und eigene Statistik.
 - Unter Kader → Einstellungen kannst du eine Admin-PIN festlegen. Dann geht Rückgängig, Löschen und Zurücksetzen nur noch mit PIN.
 
+## Tippspiel
+
+- Bei FCA-Spieltagen steht unter den Namen die Leiste „Tippspiel“. Vor dem Anpfiff tippt jeder verdeckt drei Fragen: Wer trifft zuerst? Fällt ein Tor bis zur 30. Minute? Führt der FCA zur Halbzeit? Dann Handy weitergeben.
+- Jede richtige Antwort macht dein Feld auf dem Rad ein Viertel kleiner, jede falsche ein Viertel größer. Kleineres Feld heißt: seltener Bier holen. Gilt den ganzen Abend.
+- Die App holt die Ergebnisse selbst aus dem Live-Ticker, mit ein paar Minuten Verzögerung. Schneller geht es, wenn einer im Stadion das Ergebnis im Tippspiel antippt.
+- Bei jeder Auflösung zeigt die App, wer richtig lag. An den Namen stehen drei Punkte: grün richtig, rot daneben, leer noch offen.
+
 ## Gäste und Kader
 
 - Bis zu 10 Stammspieler, dazu Gäste: Das Rad hat höchstens 12 Felder.

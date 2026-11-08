@@ -26,6 +26,9 @@
   <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V11M10 20V5M16 20v-7M22 20H2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
   <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7H4V2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.6 7.2A8 8 0 1 1 4 13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
   <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-ball" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M12 7.6l4.2 3-1.6 4.9H9.4l-1.6-4.9z" fill="currentColor"/><path d="M12 7.6V3M16.2 10.6l4.3-1.4M14.6 15.5l2.7 3.7M9.4 15.5l-2.7 3.7M7.8 10.6 3.5 9.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.6 4.6L19.2 7.4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-cross" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></symbol>
   <symbol id="i-team" viewBox="0 0 24 24"><circle cx="8.5" cy="8" r="3.4" fill="currentColor"/><path d="M2 20c0-3.6 2.9-6.2 6.5-6.2S15 16.4 15 20z" fill="currentColor"/><circle cx="17" cy="9" r="2.8" fill="currentColor" opacity=".7"/><path d="M15.6 14.2c3.5-.6 6.4 1.8 6.4 5.8h-5.3" fill="currentColor" opacity=".7"/></symbol>
 </svg>
 
@@ -55,6 +58,15 @@
           </div>
         </div>
         <ul class="pot" id="pot" aria-label="Wer noch im Topf ist"></ul>
+        <button type="button" class="tipp-bar" id="tippBar" hidden aria-haspopup="dialog">
+          <svg class="tipp-ico" aria-hidden="true"><use href="#i-ball"/></svg>
+          <span class="tipp-main">
+            <span class="tipp-head"><span class="tipp-title">Tippspiel</span><span class="tipp-match" id="tippMatch"></span></span>
+            <span class="tipp-sub" id="tippSub"></span>
+          </span>
+          <span class="tipp-qs" id="tippQs" aria-hidden="true"></span>
+          <svg class="tipp-chev" aria-hidden="true"><use href="#i-chev"/></svg>
+        </button>
         <div class="notices" id="notices"></div>
       </div>
 
@@ -109,9 +121,9 @@
 
       <div class="section-head">
         <h2 class="section-title">Bier-Saldo</h2>
-        <label class="sr" for="seasonSel">Saison</label>
-        <select id="seasonSel" class="select"></select>
+        <span class="section-meta" id="seasonMeta"></span>
       </div>
+      <div class="seg seg-sm seg-scroll" id="seasonSeg" role="group" aria-label="Saison" hidden></div>
       <div id="saldo"></div>
 
       <h2 class="section-title">Offene Bierschulden</h2>
@@ -245,6 +257,20 @@
       <button type="submit" class="sheet-next" id="pinOk">Freischalten</button>
     </div>
   </form>
+</section>
+<section class="sheet sheet-plain" id="tippSheet" hidden role="dialog" aria-modal="true" aria-labelledby="tippTitle">
+  <span class="sheet-label" id="tippLabel">Tippspiel</span>
+  <h2 class="presence-title" id="tippTitle">Wer tippt?</h2>
+  <p class="presence-note" id="tippNote"></p>
+  <div class="tipp-body" id="tippBody"></div>
+  <div class="sheet-actions" id="tippActions"></div>
+</section>
+<section class="sheet sheet-plain sheet-reveal" id="revealSheet" hidden role="dialog" aria-modal="true" aria-labelledby="revealTitle">
+  <span class="sheet-label" id="revealLabel">Tippspiel</span>
+  <h2 class="reveal-title" id="revealTitle"></h2>
+  <p class="reveal-src" id="revealSrc"></p>
+  <div class="reveal-body" id="revealBody"></div>
+  <div class="sheet-actions" id="revealActions"></div>
 </section>
 <div class="toast" id="toast" hidden role="status"></div>
 
