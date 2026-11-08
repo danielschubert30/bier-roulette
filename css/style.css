@@ -472,3 +472,45 @@ button { touch-action: manipulation; }
 .pot.is-dense { gap: 5px; }
 .pot.is-dense .chip { height: 25px; font-size: 13px; padding: 0 8px 0 6px; gap: 5px; }
 .pot.is-dense .chip .dot { width: 8px; height: 8px; }
+
+/* ---------- Meisterschaften, Admin, Biertempo ---------- */
+.brand { border: 0; background: none; padding: 0 6px 0 0; min-height: 44px; cursor: pointer; }
+.brand:disabled { opacity: 0.6; cursor: default; }
+.brand-chev { width: 15px; height: 15px; flex: none; color: var(--chalk-3); }
+.comp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.comp { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 2px 6px 2px 2px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+.comp.is-active { border-color: var(--gold); }
+.comp-main { min-width: 0; text-align: left; border: 0; background: none; padding: 10px; display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
+.comp-name { font-family: var(--font-display); font-weight: 900; font-size: 21px; line-height: 1.05; text-transform: uppercase; overflow-wrap: anywhere; }
+.comp.is-active .comp-name { color: var(--gold); }
+.comp-meta { font-size: 12px; color: var(--chalk-3); }
+.comp-actions { display: flex; align-items: center; gap: 4px; }
+.comp-rename { grid-column: 1 / -1; display: flex; gap: 6px; padding: 6px; min-width: 0; }
+.comp-rename input { flex: 1; min-width: 0; height: 42px; padding: 0 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); font-size: 16px; }
+.comp-rename .mini-btn { height: 42px; }
+.comp-new { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.comp-new .add input, .comp-new .btn { height: 46px; }
+.sheet-actions-single { grid-template-columns: 1fr; }
+.sheet-pin { z-index: 43; }
+.pin-form { display: flex; flex-direction: column; gap: 10px; }
+.pin-input {
+  height: 58px; padding: 0 12px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--line);
+  text-align: center; font-family: var(--font-display); font-weight: 900; font-size: 30px; letter-spacing: 0.4em;
+}
+.pin-input::placeholder { font-family: var(--font-body); font-weight: 500; font-size: 16px; letter-spacing: 0; color: var(--chalk-3); }
+.setting-wrap { flex-wrap: wrap; }
+.setting-wrap p { flex: 1 1 200px; }
+.setting-actions { display: flex; gap: 6px; flex: none; }
+.setting-actions .btn { height: 44px; padding: 0 14px; }
+#tempo { display: flex; flex-direction: column; gap: 10px; }
+.timeline { display: flex; flex-direction: column; gap: 8px; padding: 16px 14px 10px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
+.tl-track { position: relative; height: 18px; margin: 0 8px; }
+.tl-track::before { content: ""; position: absolute; left: -8px; right: -8px; top: 50%; height: 2px; margin-top: -1px; background: var(--chalk-4); }
+.tl-dot { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 2px var(--night); }
+.tl-axis { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--chalk-3); font-variant-numeric: tabular-nums; }
+.records { list-style: none; margin: 0; padding: 2px 14px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
+.records li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.records li:last-child { border-bottom: 0; }
+.rec-label { font-weight: 600; }
+.rec-value { font-family: var(--font-display); font-weight: 900; font-size: 22px; font-variant-numeric: tabular-nums; }
+.rec-meta { grid-column: 1 / -1; font-size: 12px; color: var(--chalk-3); }

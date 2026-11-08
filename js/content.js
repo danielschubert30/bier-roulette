@@ -154,3 +154,37 @@ export const FCA_FACTS = [
   // https://www.goal.com/de/meldungen/rb-leipzig-psg-tuchel-nagelsmann-ftr-cl-augsburg/s39a27zkhydc1gh08jp078wjm
   "Julian Nagelsmann kickte 2007 in der FCA-Reserve und wurde nach einer Verletzung Scout für Thomas Tuchel."
 ];
+
+// Biertempo: Abstand zum letzten Bier des Abends. {t} wird durch die Zeit ersetzt.
+export const TEMPO_QUIPS = {
+  first: [
+    "Anstich! Das erste Bier des Abends.",
+    "Das erste Bier heute. Ab jetzt läuft die Stoppuhr.",
+    "Erstes Bier des Abends. Die Leber macht sich warm."
+  ],
+  turbo: [
+    "Erst {t} seit dem letzten Bier. Hier wird im Akkord getrunken.",
+    "{t}! Die Leber beantragt eine Auswechslung.",
+    "Turbo: {t}. Selbst der Bierstand kommt nicht hinterher."
+  ],
+  fast: [
+    "{t} seit dem letzten Bier. Gegenpressing an der Theke.",
+    "{t}. Schnelles Umschaltspiel, sauber.",
+    "{t}. Die Becher sind schneller leer als die Kurve laut."
+  ],
+  normal: [
+    "{t} seit dem letzten Bier. Solides Bundesliga-Tempo.",
+    "{t}. Ganz normaler Spielfluss.",
+    "{t}. Ruhig, kontrolliert, durstig."
+  ],
+  slow: [
+    "{t} seit dem letzten Bier. Das ist Verwaltungsfußball.",
+    "{t}. Da wird der Becher ja warm.",
+    "{t}. Hier fehlt eindeutig die Spielfreude."
+  ],
+  drought: [
+    "{t} ohne Bier. Länger als eine Halbzeit.",
+    "{t} Durststrecke. Hat jemand den Bierstand verlegt?",
+    "{t}. Das ist kein Spiel mehr, das ist eine Wüstenwanderung."
+  ]
+};

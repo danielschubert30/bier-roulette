@@ -25,15 +25,17 @@
   <symbol id="i-wheel" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="2.6" fill="currentColor"/></symbol>
   <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V11M10 20V5M16 20v-7M22 20H2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
   <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7H4V2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.6 7.2A8 8 0 1 1 4 13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-team" viewBox="0 0 24 24"><circle cx="8.5" cy="8" r="3.4" fill="currentColor"/><path d="M2 20c0-3.6 2.9-6.2 6.5-6.2S15 16.4 15 20z" fill="currentColor"/><circle cx="17" cy="9" r="2.8" fill="currentColor" opacity=".7"/><path d="M15.6 14.2c3.5-.6 6.4 1.8 6.4 5.8h-5.3" fill="currentColor" opacity=".7"/></symbol>
 </svg>
 
 <div class="app">
   <header class="topbar">
-    <div class="brand">
+    <button type="button" class="brand" id="compBtn" aria-haspopup="dialog" title="Meisterschaft wechseln">
       <svg class="brand-mark" aria-hidden="true"><use href="#i-wheel"/></svg>
-      <span>FCA Bier-Roulette</span>
-    </div>
+      <span id="compName">FCA-Spieltage</span>
+      <svg class="brand-chev" aria-hidden="true"><use href="#i-chev"/></svg>
+    </button>
     <button type="button" class="champ-pill" id="champPill" hidden>
       <svg aria-hidden="true"><use href="#i-crown"/></svg>
       <span class="champ-pill-label">Champion</span>
@@ -102,6 +104,9 @@
       <div id="table"></div>
       <p class="caption">Geholt: wie oft jemand dran war, Bierschulden und verlorene Finals eingerechnet. Titel: gewonnene Finals.</p>
 
+      <h2 class="section-title">Biertempo</h2>
+      <div id="tempo"></div>
+
       <div class="section-head">
         <h2 class="section-title">Bier-Saldo</h2>
         <label class="sr" for="seasonSel">Saison</label>
@@ -154,8 +159,15 @@
         <p>Vibration<small>Funktioniert nur auf Android-Handys</small></p>
         <label class="switch"><input type="checkbox" id="vibeToggle"><span class="track"></span><span class="sr">Vibration an oder aus</span></label>
       </div>
+      <div class="setting setting-wrap">
+        <p>Admin-PIN<small id="adminInfo"></small></p>
+        <div class="setting-actions">
+          <button type="button" class="btn ghost" id="adminSet">Festlegen</button>
+          <button type="button" class="btn ghost" id="adminRemove" hidden>Entfernen</button>
+        </div>
+      </div>
       <div class="setting">
-        <p>Statistik zurücksetzen<small>Löscht alle Runden, der Kader bleibt.</small></p>
+        <p>Statistik zurücksetzen<small>Löscht alle Runden dieser Meisterschaft. Der Kader bleibt.</small></p>
         <button type="button" class="btn ghost" id="resetBtn">Zurücksetzen</button>
       </div>
       <p class="footnote">Gespeichert auf diesem Handy · Version <span id="version"></span><br>Private Fan-App, keine offizielle App des FC Augsburg.</p>
@@ -194,6 +206,45 @@
     <button type="button" class="sheet-undo" id="presenceCancel">Abbrechen</button>
     <button type="button" class="sheet-next" id="presenceOk">Übernehmen</button>
   </div>
+</section>
+<section class="sheet sheet-plain" id="compSheet" hidden role="dialog" aria-modal="true" aria-labelledby="compTitle">
+  <span class="sheet-label">Meisterschaften</span>
+  <h2 class="presence-title" id="compTitle">Wo wird gespielt?</h2>
+  <ul class="comp-list" id="compList"></ul>
+  <form class="comp-new" id="compForm" autocomplete="off">
+    <p class="kicker">Neue Meisterschaft</p>
+    <div class="add">
+      <label class="sr" for="compInput">Name der neuen Meisterschaft</label>
+      <input id="compInput" type="text" maxlength="24" placeholder="z. B. Vatertagstour" enterkeyhint="done">
+      <button type="submit" class="btn">Anlegen</button>
+    </div>
+    <div class="setting">
+      <p>Kader übernehmen<small>Stammspieler und Gäste von hier kopieren</small></p>
+      <label class="switch"><input type="checkbox" id="compCopy" checked><span class="track"></span><span class="sr">Kader übernehmen</span></label>
+    </div>
+    <div class="setting">
+      <p>FCA-Spieltag<small>Beim Drehen FCA-Fakten einblenden</small></p>
+      <label class="switch"><input type="checkbox" id="compFca"><span class="track"></span><span class="sr">FCA-Spieltag</span></label>
+    </div>
+  </form>
+  <div class="sheet-actions sheet-actions-single">
+    <button type="button" class="sheet-next" id="compClose">Fertig</button>
+  </div>
+</section>
+<section class="sheet sheet-plain sheet-pin" id="pinSheet" hidden role="dialog" aria-modal="true" aria-labelledby="pinTitle">
+  <span class="sheet-label">Admin</span>
+  <h2 class="presence-title" id="pinTitle">Admin-PIN</h2>
+  <p class="presence-note" id="pinNote"></p>
+  <form class="pin-form" id="pinForm" autocomplete="off">
+    <label class="sr" for="pinInput">PIN</label>
+    <input id="pinInput" class="pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="PIN">
+    <label class="sr" for="pinInput2">PIN wiederholen</label>
+    <input id="pinInput2" class="pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="Wiederholen" hidden>
+    <div class="sheet-actions">
+      <button type="button" class="sheet-undo" id="pinCancel">Abbrechen</button>
+      <button type="submit" class="sheet-next" id="pinOk">Freischalten</button>
+    </div>
+  </form>
 </section>
 <div class="toast" id="toast" hidden role="status"></div>
 

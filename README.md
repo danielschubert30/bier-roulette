@@ -17,6 +17,11 @@ Wer holt das nächste Bier? Das Glücksrad für unsere FCA-Runde im Stadion.
 - Fehlt ein Finalist, entscheidet ihr: Finale nachholen oder kampflos.
 - Der Bier-Saldo gleicht über die Saison aus, dass man bei kleinen Runden weniger Bier holen muss.
 
+## Meisterschaften und Admin
+
+- Oben links auf den Namen tippen: Dort wechselst du zwischen Meisterschaften (z. B. FCA-Spieltage, Vatertagstour) oder legst neue an. Jede hat eigenen Kader und eigene Statistik.
+- Unter Kader → Einstellungen kannst du eine Admin-PIN festlegen. Dann geht Rückgängig, Löschen und Zurücksetzen nur noch mit PIN.
+
 ## Gäste und Kader
 
 - Bis zu 10 Stammspieler, dazu Gäste: Das Rad hat höchstens 12 Felder.

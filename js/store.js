@@ -1,5 +1,7 @@
 // Speichern auf dem Gerät und Datenmodell.
-// Alles, was die App sich merkt, liegt in einem Objekt unter einem localStorage-Schlüssel.
+// Alles, was die App sich merkt, liegt in einem Objekt unter einem localStorage-Schlüssel:
+// { version: 2, activeId, competitions: [Meisterschaft, ...], settings, admin }
+// Jede Meisterschaft hat ihren eigenen Kader, ihre Runden, Statistik und Bierschulden.
 
 const KEY = "fca-bier-roulette:v1";
 
@@ -13,6 +15,8 @@ export const MAX_WHEEL = 10;      // Stammspieler, die mitspielen
 export const MAX_ON_WHEEL = 12;   // Felder auf dem Rad insgesamt (Stammspieler + Gäste des Abends)
 export const MAX_ROSTER = 20;     // Kader inklusive Gäste
 export const MAX_NAME = 16;
+export const MAX_COMPS = 10;      // Meisterschaften
+export const MAX_COMP_NAME = 24;
 
 const HEX = /^#[0-9a-f]{6}$/i;
 const ID = /^[A-Za-z0-9_-]{1,48}$/;
@@ -35,21 +39,33 @@ export function cleanName(v) {
   return String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, MAX_NAME);
 }
 
-export function defaultPlayers() {
-  return DEFAULT_NAMES.map((name, i) => ({ id: "p" + (i + 1), name, color: PALETTE[i], active: true }));
+export function cleanTitle(v) {
+  return String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, MAX_COMP_NAME);
 }
 
-function emptyState() {
+export function defaultPlayers() {
+  return DEFAULT_NAMES.map((name, i) => ({ id: "p" + (i + 1), name, color: PALETTE[i], active: true, guest: false }));
+}
+
+// players: Liste zum Übernehmen (wird kopiert); ohne Angabe der Standard-Kader
+export function newCompetition(name, fca, players) {
   return {
-    version: 1,
-    players: defaultPlayers(),
+    id: uid("c"),
+    name: cleanTitle(name) || "Meisterschaft",
+    createdAt: Date.now(),
+    fca: !!fca,           // FCA-Spieltage: FCA-Fakten beim Drehen
+    players: players ? JSON.parse(JSON.stringify(players)) : defaultPlayers(),
     round: null,          // laufende Runde
     rounds: [],           // abgeschlossene Runden (in Reihenfolge des Abschlusses)
     pending: [],          // Runden mit verschobenem Finale
     debts: [],            // Bierschulden von Fehlenden
-    presence: null,       // { day: "JJJJ-MM-TT", ids: [...] } – wer an diesem Abend da ist
-    settings: { sound: true, vibrate: true }
+    presence: null        // { day: "JJJJ-MM-TT", ids: [...] } – wer an diesem Abend da ist
   };
+}
+
+function defaultRoot() {
+  const c = newCompetition("FCA-Spieltage", true, null);
+  return { version: 2, activeId: c.id, competitions: [c], settings: { sound: true, vibrate: true }, admin: null };
 }
 
 function normPlayer(p, i) {
@@ -116,6 +132,25 @@ function normDebt(d) {
   };
 }
 
+function normComp(raw, fallbackName, fallbackFca) {
+  const c = newCompetition(cleanTitle(raw.name) || fallbackName, raw.fca === undefined ? fallbackFca : raw.fca === true, []);
+  if (ID.test(String(raw.id || ""))) c.id = String(raw.id);
+  if (isFinite(raw.createdAt) && raw.createdAt > 0) c.createdAt = Number(raw.createdAt);
+  const players = (Array.isArray(raw.players) ? raw.players : []).map(normPlayer).filter(Boolean);
+  const seen = new Set();
+  c.players = players.filter((p) => (seen.has(p.id) ? false : seen.add(p.id))).slice(0, MAX_ROSTER);
+  let active = 0;
+  for (const p of c.players) if (!p.guest && p.active && ++active > MAX_WHEEL) p.active = false;
+  c.round = normRound(raw.round);
+  c.rounds = (Array.isArray(raw.rounds) ? raw.rounds : []).map(normRound).filter((r) => r && r.final && r.final.winner);
+  c.pending = (Array.isArray(raw.pending) ? raw.pending : []).map(normRound).filter((r) => r && r.final && !r.final.winner);
+  c.debts = (Array.isArray(raw.debts) ? raw.debts : []).map(normDebt).filter(Boolean);
+  if (raw.presence && typeof raw.presence.day === "string" && Array.isArray(raw.presence.ids)) {
+    c.presence = { day: raw.presence.day, ids: raw.presence.ids.filter((id) => ID.test(String(id))).map(String) };
+  }
+  return c;
+}
+
 export function load() {
   let raw = null;
   try {
@@ -123,30 +158,35 @@ export function load() {
   } catch (e) {
     raw = null;
   }
-  if (!raw || typeof raw !== "object") return emptyState();
-  const state = emptyState();
-  const players = (Array.isArray(raw.players) ? raw.players : []).map(normPlayer).filter(Boolean);
-  const seen = new Set();
-  state.players = players.filter((p) => (seen.has(p.id) ? false : seen.add(p.id))).slice(0, MAX_ROSTER);
-  let active = 0;
-  for (const p of state.players) if (!p.guest && p.active && ++active > MAX_WHEEL) p.active = false;
-  state.round = normRound(raw.round);
-  state.rounds = (Array.isArray(raw.rounds) ? raw.rounds : []).map(normRound).filter((r) => r && r.final && r.final.winner);
-  state.pending = (Array.isArray(raw.pending) ? raw.pending : []).map(normRound).filter((r) => r && r.final && !r.final.winner);
-  state.debts = (Array.isArray(raw.debts) ? raw.debts : []).map(normDebt).filter(Boolean);
-  if (raw.presence && typeof raw.presence.day === "string" && Array.isArray(raw.presence.ids)) {
-    state.presence = { day: raw.presence.day, ids: raw.presence.ids.filter((id) => ID.test(String(id))).map(String) };
+  if (!raw || typeof raw !== "object") return defaultRoot();
+  const root = defaultRoot();
+  root.competitions = [];
+  if (Array.isArray(raw.competitions)) {
+    raw.competitions.forEach((c, i) => {
+      if (!c || typeof c !== "object") return;
+      const n = normComp(c, `Meisterschaft ${i + 1}`, false);
+      if (!root.competitions.some((x) => x.id === n.id)) root.competitions.push(n);
+    });
+  } else {
+    // Fassung 1: alles lag direkt im Objekt – wird zur ersten Meisterschaft
+    root.competitions.push(normComp({ ...raw, id: "c1", name: "FCA-Spieltage", fca: true }, "FCA-Spieltage", true));
   }
+  if (!root.competitions.length) return defaultRoot();
+  root.competitions = root.competitions.slice(0, MAX_COMPS);
+  root.activeId = root.competitions.some((c) => c.id === raw.activeId) ? raw.activeId : root.competitions[0].id;
   if (raw.settings && typeof raw.settings === "object") {
-    state.settings.sound = raw.settings.sound !== false;
-    state.settings.vibrate = raw.settings.vibrate !== false;
+    root.settings.sound = raw.settings.sound !== false;
+    root.settings.vibrate = raw.settings.vibrate !== false;
   }
-  return state;
+  if (raw.admin && /^[0-9a-f]{64}$/.test(String(raw.admin.hash)) && /^[0-9a-f]{32}$/.test(String(raw.admin.salt))) {
+    root.admin = { hash: raw.admin.hash, salt: raw.admin.salt };
+  }
+  return root;
 }
 
-export function save(state) {
+export function save(root) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(state));
+    localStorage.setItem(KEY, JSON.stringify(root));
     return true;
   } catch (e) {
     return false;

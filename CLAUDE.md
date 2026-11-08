@@ -40,12 +40,17 @@
 
 ### Datenmodell (`js/store.js`)
 
+Gespeichert wird ein Objekt `{version: 2, activeId, competitions, settings, admin}`. Ältere Stände (Fassung 1, alles direkt im Objekt) werden beim Laden zur Meisterschaft „FCA-Spieltage“. In `js/app.js` ist `root` das Gesamtobjekt und `state` die aktive Meisterschaft; alle Felder unten gehören zu einer Meisterschaft (`{id, name, createdAt, fca, …}`). `fca` = FCA-Fakten beim Drehen.
+
+- `admin`: `{salt, hash}` der Admin-PIN (SHA-256) oder `null`. `requireAdmin(was, fn)` schützt Rückgängig, Löschen, Abbrechen, Kampflos, Zurücksetzen und Meisterschaft löschen. Das ist nur ein Schutz auf dem Gerät; bei Phase 2 muss der Server die Rechte prüfen.
+
 - `players`: `{id, name, color, active, guest}` – Kader, max. 20 (`MAX_ROSTER`). Stammspieler: `active` = spielt mit, max. 10 (`MAX_WHEEL`). Gäste (`guest: true`) sind nie `active`; sie stehen nur im Topf, solange sie heute als anwesend markiert sind (`syncRoundMembers`). Rad max. 12 Felder (`MAX_ON_WHEEL`).
 - `presence`: `{day, ids}` – wer an diesem Abend da ist. Ein Abend geht bis 6 Uhr früh (`dayStart`). Ohne Eintrag für heute fragt die App vor dem ersten Dreh nach.
 - `round`: laufende Runde – `pot` (alle Mitspieler beim Start, auch Fehlende), `picks` (`{id, at, absent, beers, debtId}`), `final` (Elfmeterschießen mit `shots`, `winner`, `loser`, `forfeit`, `postponed`, `beers`, `debtId`).
 - `pending`: Runden mit verschobenem Finale (werden über Hinweise nachgeholt).
 - `rounds`: abgeschlossene Runden in Reihenfolge des Abschlusses. Champion = Sieger der zuletzt abgeschlossenen Runde.
 - `debts`: Bierschulden `{id, playerId, at, roundId, reason: pick|forfeit, name, color, settledAt, beers}`.
+- Biertempo: `beerLog` (alle wirklich geholten Biere mit Zeit) und `gapsOf` (Abstände am selben Abend) speisen Ticker, Ergebnis und Statistik.
 - `beers` = Anzahl Anwesender (Mitspieler) im Moment des Holens. Daraus rechnet die Statistik den Bier-Saldo pro Saison (Juli–Juni): geholte Biere minus Saisonschnitt × Anzahl.
 - Kader-Änderungen wirken sofort: neue Stammspieler kommen in den `pot` der laufenden Runde (`joinRound`), ausgeschaltete oder gelöschte verlassen ihn ohne Schuld (`leaveRound`, gesperrt für Finalisten und die letzten zwei: `leaveBlocker`). Im Finale gelten Neue erst ab der nächsten Runde.
 

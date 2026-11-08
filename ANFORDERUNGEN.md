@@ -27,12 +27,19 @@ Legende: `[x]` umgesetzt · `[ ]` offen
 - [x] **A13 Gastrunde:** Ein Finale spielen nur Stammspieler. Sind nur noch zwei Stammspieler übrig, kommen zuerst die Gäste aufs Rad; danach folgt das Finale.
 - [x] **A14 Kader jederzeit ändern:** Neue Stammspieler kommen sofort in die laufende Runde. Wer ausgeschaltet oder gelöscht wird, verlässt sie ohne Bierschuld (nicht möglich für Finalisten oder die letzten zwei). Gäste lassen sich mit „Aufnehmen“ zum Stammspieler machen.
 
+### Admin und Meisterschaften (beauftragt 08.11.2026)
+
+- [x] **A15 Admin-PIN:** Optional festlegbar (Kader → Einstellungen). Dann nur mit PIN: Rückgängig, Spieler/Gäste löschen, Runde abbrechen, kampflos werten, Statistik zurücksetzen, Meisterschaft löschen. Nach der Eingabe eine Minute frei. Drehen und Schießen bleiben für alle offen. Schutz gilt nur auf dem Gerät (lokal gespeichert).
+- [x] **A16 Rückgängig ins Finale:** Hat das Elfmeterschießen noch nicht begonnen, nimmt Rückgängig die letzte Ziehung zurück und das Finale verschwindet wieder.
+- [x] **A17 Meisterschaften:** Mehrere getrennte Wettbewerbe (z. B. „FCA-Spieltage“, „Vatertagstour“), umschaltbar über den Namen oben links. Jede hat eigenen Kader, Runden, Champion, Statistik und Bierschulden. Beim Anlegen „Kader übernehmen“ und „FCA-Spieltag“ (FCA-Fakten) wählbar. Umbenennen und Löschen möglich, höchstens 10.
+
 ## B – Inhalte
 
 - [x] **B1 Während das Rad dreht:** FCA-Fakten (45 geprüfte, mit Quelle in `js/content.js`) oder Sprüche einblenden.
 - [x] **B2 Ergebnis:** „Bierholer: Name“, dazu „zum X. Mal“ plus passende Statistik oder Spruch.
 - [x] **B3 Standard-Kader:** Betzmeister, Cousin, Demharter M., Emilio, Schaufi, Schubi.
 - [x] **B4 FCA-Wappen** in der Mitte des Rads.
+- [x] **B5 Takt beim Drehen:** Zu Beginn jedes Drehs „Takt · 23 Min“ mit Spruch je nach Tempo (Anstich, Turbo unter 10 Min, zügig, normal, gemütlich, Durststrecke über 60 Min), danach FCA-Fakt oder Spruch. Im Ergebnis „23 Min nach dem letzten Bier“, bei neuem Tages- oder Saisonrekord ein eigener Satz.
 
 ## C – Design
 
@@ -58,6 +65,13 @@ Legende: `[x]` umgesetzt · `[ ]` offen
 - [x] **E4 Bier-Saldo pro Saison (Juli–Juni):** Die App merkt sich bei jedem Holen, wie viele Biere es waren (= Anwesende). Saldo = geholte Biere minus Saisonschnitt pro Runde mal Anzahl. Gleicht aus, dass man bei einer kleinen Runde weniger zahlt. Der Champion-Vorteil bleibt bestehen.
 - [x] **E5 Ausgleichsliste:** „X gibt Y n Bier aus“, auf ganze Biere gerundet, für die gewählte Saison.
 - [x] **E6 Offene Bierschulden** mit Datum und Grund, einlösbar auch in der Statistik.
+- [x] **E7 Biertempo:** Heute: Anzahl Biere, Ø Takt, Bestzeit, Zeitleiste in Spielerfarben. Saison: schnellstes Bier, längste Durststrecke, Ø Takt. Gezählt wird nur am selben Abend.
+
+## Live-Ticker (Vorschlag, noch nicht beauftragt)
+
+- Datenquelle: OpenLigaDB (kostenlos, ohne Schlüssel, aus dem Browser abrufbar, von Freiwilligen gepflegt; Tore mit Minute). Verzögerung möglich, im Stadion ist man schneller.
+- Darum zweigleisig: Knöpfe „Tor FCA“ / „Gegentor“ für sofort, Live-Daten für Spielstand, Minute und Gegner.
+- Spielideen: Gegentor = Frustdreh (sofort ein Extra-Bier), FCA-Tor = Joker für den zuletzt Gezogenen, Spielstand und Minute im Ticker, Tippspiel vor Anpfiff.
 
 ## Ideen-Speicher (noch nicht beauftragt)
 

@@ -1,10 +1,10 @@
 // FCA Bier-Roulette – Ablauf und Oberfläche.
-import { load, save, MAX_WHEEL, MAX_ON_WHEEL, MAX_ROSTER, PALETTE, rand, uid, cleanName } from "./store.js";
+import { load, save, MAX_WHEEL, MAX_ON_WHEEL, MAX_ROSTER, MAX_COMPS, PALETTE, rand, uid, cleanName, cleanTitle, newCompetition } from "./store.js";
 import { createWheel } from "./wheel.js";
 import * as SO from "./shootout.js";
-import { SPIN_QUIPS, RESULT_QUIPS, FINAL_INTROS, CHAMPION_QUIPS, SHOT_TEXT, FCA_FACTS } from "./content.js";
+import { SPIN_QUIPS, RESULT_QUIPS, FINAL_INTROS, CHAMPION_QUIPS, SHOT_TEXT, FCA_FACTS, TEMPO_QUIPS } from "./content.js";
 
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.3.0";
 const NS = "http://www.w3.org/2000/svg";
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const $ = (id) => document.getElementById(id);
@@ -27,12 +27,18 @@ const els = {
   kpis: $("kpis"), table: $("table"), seasonSel: $("seasonSel"), saldo: $("saldo"), debts: $("debts"), honors: $("honors"),
   squadNote: $("squadNote"), roster: $("roster"), addForm: $("addForm"), nameInput: $("nameInput"), addBtn: $("addBtn"),
   roundTools: $("roundTools"), abortBtn: $("abortBtn"), soundToggle: $("soundToggle"), vibeToggle: $("vibeToggle"),
-  resetBtn: $("resetBtn"), version: $("version"), toast: $("toast")
+  resetBtn: $("resetBtn"), version: $("version"), toast: $("toast"),
+  compBtn: $("compBtn"), compName: $("compName"), compSheet: $("compSheet"), compList: $("compList"),
+  compForm: $("compForm"), compInput: $("compInput"), compCopy: $("compCopy"), compFca: $("compFca"), compClose: $("compClose"),
+  pinSheet: $("pinSheet"), pinTitle: $("pinTitle"), pinNote: $("pinNote"), pinForm: $("pinForm"),
+  pinInput: $("pinInput"), pinInput2: $("pinInput2"), pinOk: $("pinOk"), pinCancel: $("pinCancel"),
+  adminInfo: $("adminInfo"), adminSet: $("adminSet"), adminRemove: $("adminRemove"), tempo: $("tempo")
 };
 
-const state = load();
+const root = load();
+let state = root.competitions.find((c) => c.id === root.activeId) || root.competitions[0];   // aktive Meisterschaft
 const ui = {
-  tab: "game", range: "season", seasonStart: null, addAsGuest: false,
+  tab: "game", range: "season", seasonStart: null, addAsGuest: false, renaming: null,
   spinning: false, shooting: false, sheetFor: null, sheetDebt: false, presenceCb: null,
   playingId: null,       // offenes Finale, das gerade nachgeholt wird
   champRoundId: null,    // Champion-Anzeige für ein nachgeholtes Finale
@@ -128,7 +134,7 @@ function toast(msg) {
 }
 let saveWarned = false;
 function persist() {
-  if (!save(state) && !saveWarned) {
+  if (!save(root) && !saveWarned) {
     saveWarned = true;
     toast("Speichern klappt in diesem Browser nicht. Privater Modus?");
   }
@@ -285,13 +291,13 @@ function newDebt(p, roundId, reason, at) {
 /* ---------- Ton, Vibration, Bildschirm ---------- */
 let actx = null;
 function unlockAudio() {
-  if (!state.settings.sound) return;
+  if (!root.settings.sound) return;
   try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
     if (actx.state === "suspended") actx.resume();
   } catch (e) { actx = null; }
 }
-const audio = () => (state.settings.sound && actx ? actx : null);
+const audio = () => (root.settings.sound && actx ? actx : null);
 function tone(freq, start, len, vol, type = "triangle", slideTo) {
   const a = audio();
   if (!a) return;
@@ -336,7 +342,7 @@ const cheer = () => noise(0, 1.3, 0.14, 1100);
 const groan = () => tone(240, 0, 0.55, 0.06, "sawtooth", 140);
 const champFanfare = () => [523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5].forEach((f, i) => tone(f, i * 0.13, i === 5 ? 0.8 : 0.16, 0.09));
 function buzz(pattern) {
-  if (!state.settings.vibrate || !navigator.vibrate) return;
+  if (!root.settings.vibrate || !navigator.vibrate) return;
   try { navigator.vibrate(pattern); } catch (e) { /* egal */ }
 }
 let wakeLock = null, wantAwake = false;
@@ -362,7 +368,7 @@ function drawFrom(kind) {
   return src[decks[kind].pop()];
 }
 function spinLine() {
-  if (FCA_FACTS.length && rand() < 0.6) return { label: "FCA-Fakt", text: drawFrom("fact") };
+  if (state.fca && FCA_FACTS.length && rand() < 0.6) return { label: "FCA-Fakt", text: drawFrom("fact") };
   return { label: "Ansage", text: drawFrom("quip") };
 }
 function setTicker(label, text) {
@@ -395,7 +401,7 @@ function tickerFor(mode) {
     const away = list.filter((p) => !isPresent(p.id)).length;
     return {
       label: `Bier Nr. ${no}`,
-      text: `${list.length} im Topf` + (away ? `, davon ${away} heute nicht da` : "") + `. Risiko je ${pctF.format(1 / list.length)}.`
+      text: `${list.length} im Topf` + (away ? `, davon ${away} heute nicht da` : "") + `. Risiko je ${pctF.format(1 / list.length)}.` + lastBeerNote()
     };
   }
   if (mode === "final") {
@@ -469,8 +475,13 @@ async function spin() {
   const r = state.round;
   syncWheel(false);
   ui.spinning = true;
-  const line = spinLine();
+  const line = tempoLine();
   setTicker(line.label, line.text);
+  const swap = reduceMotion ? null : setTimeout(() => {
+    if (!ui.spinning) return;
+    const l = spinLine();
+    setTicker(l.label, l.text);
+  }, 2900);
   renderChrome();
   renderNotices();
   const idx = Math.floor(rand() * wheel.players.length);
@@ -481,6 +492,7 @@ async function spin() {
     onTick: tick,
     reduceMotion
   });
+  clearTimeout(swap);
   const p = wheel.players[landed];
   const absent = !isPresent(p.id);
   const rec = { id: p.id, at: Date.now(), absent, beers: absent ? null : presentCount(), debtId: null };
@@ -509,6 +521,18 @@ function resultTexts(p) {
   if (today > 1) meta += ` · heute schon ${today}×`;
 
   const stats = [];
+  let forced = null;
+  const todayGaps = gapsOf(beerLog(dayStart()));
+  const lastGap = todayGaps[todayGaps.length - 1];
+  if (lastGap && lastGap.id === p.id && Date.now() - lastGap.at < 120000) {
+    meta += ` · ${shortDur(lastGap.ms)} nach dem letzten Bier`;
+    const seasonGaps = gapsOf(beerLog(seasonStartOf()));
+    const prevSeason = seasonGaps.slice(0, -1).map((x) => x.ms);
+    const prevToday = todayGaps.slice(0, -1).map((x) => x.ms);
+    if (prevSeason.length >= 5 && lastGap.ms < Math.min(...prevSeason)) forced = `Saisonrekord im Biertempo: nur ${fmtDur(lastGap.ms)} seit dem letzten Bier.`;
+    else if (prevToday.length >= 2 && lastGap.ms < Math.min(...prevToday)) forced = `Tagesrekord im Biertempo: nur ${fmtDur(lastGap.ms)} seit dem letzten Bier.`;
+    else if (lastGap.ms >= 3600000) stats.push(`${cap(fmtDur(lastGap.ms))} Durststrecke sind vorbei. Endlich.`);
+  }
   const champ = champion();
   if (champ && champ.id === p.id) stats.push("Ausgerechnet der amtierende Champion. Die Krone wackelt.");
   if (total === 1) stats.push("Premiere: das allererste Bier in der ewigen Statistik.");
@@ -530,7 +554,8 @@ function resultTexts(p) {
   if (total >= 3 && total === max && leaders === 1) stats.push(`Alleiniger Spitzenreiter der ewigen Bierholer-Tabelle: ${total}× dran.`);
 
   let quip;
-  if (stats.length && rand() < 0.75) quip = stats[0];
+  if (forced) quip = forced;
+  else if (stats.length && rand() < 0.75) quip = stats[0];
   else {
     let i = Math.floor(rand() * RESULT_QUIPS.length);
     if (i === ui.lastQuip) i = (i + 1) % RESULT_QUIPS.length;
@@ -566,7 +591,7 @@ function openSheet(p, absent) {
 }
 function closeSheet() {
   els.sheet.hidden = true;
-  if (els.presenceSheet.hidden) els.sheetBackdrop.hidden = true;
+  syncBackdrop();
   ui.sheetFor = null;
   ui.sheetDebt = false;
 }
@@ -586,9 +611,16 @@ function sheetNext() {
   renderAll(true);
   if (respin && viewMode() === "spin") spin();
 }
-function undoLast() {
+function canUndo() {
   const r = state.round;
-  if (!r || r.final || !r.picks.length || ui.spinning) return;
+  if (!r || ui.spinning || ui.shooting || ui.playingId) return false;
+  if (r.final) return !r.final.winner && r.final.shots.length === 0 && r.picks.length > 0;
+  return r.picks.length > 0;
+}
+function undoLast() {
+  if (!canUndo()) return;
+  const r = state.round;
+  if (r.final) { r.final = null; ui.finalLine = null; }
   const k = r.picks.pop();
   if (k.debtId) state.debts = state.debts.filter((d) => d.id !== k.debtId);
   persist();
@@ -833,7 +865,7 @@ function renderChrome() {
   }
 
   els.pot.classList.toggle("is-dense", els.pot.children.length > 8);
-  els.undoBtn.hidden = !(mode === "spin" && state.round.picks.length > 0 && !ui.spinning && !ui.sheetFor);
+  els.undoBtn.hidden = !((mode === "spin" || mode === "final") && canUndo() && !ui.sheetFor);
   const busy = ui.spinning || ui.shooting || !!ui.sheetFor;
   els.presenceBtn.disabled = busy;
   const gHere = presentGuests().length;
@@ -855,6 +887,8 @@ function renderChrome() {
 
   const c = champion();
   els.champPill.hidden = !c;
+  els.compName.textContent = state.name;
+  els.compBtn.disabled = busy;
   if (c) els.champPillName.textContent = c.info.name;
 }
 
@@ -887,7 +921,7 @@ function renderNotices() {
       const key = "ff:" + r.id;
       const armed = ui.armed === key;
       actions.push(btn("mini-btn ghost" + (armed ? " is-armed" : ""), armed ? `${awayName} verliert?` : "Kampflos", () => {
-        if (ui.armed === key) { disarm(); forfeitFinal(r, away[0]); }
+        if (ui.armed === key) { disarm(); requireAdmin("Kampflos werten", () => forfeitFinal(r, away[0])); }
         else { arm(key); renderNotices(); }
       }, busy));
     } else {
@@ -959,7 +993,7 @@ function renderDecide(r) {
     const key = "ffnow:" + r.id;
     const armed = ui.armed === key;
     box.append(btn("btn ghost" + (armed ? " is-armed" : ""), armed ? `Sicher? ${name} schuldet dann das Bier` : `${name} verliert kampflos`, () => {
-      if (ui.armed === key) { disarm(); forfeitFinal(r, away[0]); }
+      if (ui.armed === key) { disarm(); requireAdmin("Kampflos werten", () => forfeitFinal(r, away[0])); }
       else { arm(key); renderDecide(r); }
     }));
     box.append(h("p", "caption", `Ist ${name} doch da? Oben bei „Anwesenheit“ einschalten.`));
@@ -1082,7 +1116,7 @@ function closePresence(apply) {
     persist();
   }
   els.presenceSheet.hidden = true;
-  if (els.sheet.hidden) els.sheetBackdrop.hidden = true;
+  syncBackdrop();
   renderAll(false);
   if (apply && cb) cb();
 }
@@ -1226,6 +1260,7 @@ function renderStats() {
     els.table.append(t);
   }
 
+  renderTempo();
   renderSaldo();
   renderDebtList();
   renderHonors();
@@ -1347,7 +1382,7 @@ function renderSquad() {
     rm.type = "button";
     rm.setAttribute("aria-label", armed ? `${p.name} wirklich löschen` : `${p.name} aus dem Kader löschen`);
     rm.addEventListener("click", () => {
-      if (ui.armed === "rm:" + p.id) { disarm(); removePlayer(p.id); }
+      if (ui.armed === "rm:" + p.id) { disarm(); requireAdmin("Löschen", () => removePlayer(p.id)); }
       else { arm("rm:" + p.id); renderSquad(); }
     });
     return rm;
@@ -1400,8 +1435,13 @@ function renderSquad() {
   els.abortBtn.textContent = abortArmed ? "Wirklich abbrechen?" : "Runde abbrechen";
   els.abortBtn.classList.toggle("is-armed", abortArmed);
 
-  els.soundToggle.checked = state.settings.sound;
-  els.vibeToggle.checked = state.settings.vibrate;
+  els.adminInfo.textContent = hasAdmin()
+    ? "Rückgängig, Löschen, Runde abbrechen, Kampflos und Zurücksetzen nur mit PIN. Nach der Eingabe bleibt es eine Minute frei."
+    : "Noch keine PIN. Jeder am Handy darf rückgängig machen, löschen und zurücksetzen.";
+  els.adminSet.textContent = hasAdmin() ? "Ändern" : "Festlegen";
+  els.adminRemove.hidden = !hasAdmin();
+  els.soundToggle.checked = root.settings.sound;
+  els.vibeToggle.checked = root.settings.vibrate;
   const resetArmed = ui.armed === "reset";
   els.resetBtn.textContent = resetArmed ? "Wirklich löschen?" : "Zurücksetzen";
   els.resetBtn.classList.toggle("is-armed", resetArmed);
@@ -1487,6 +1527,340 @@ function removePlayer(id) {
   renderGame(false);
 }
 
+/* ---------- Fenster ---------- */
+function syncBackdrop() {
+  els.sheetBackdrop.hidden = ![els.sheet, els.presenceSheet, els.compSheet, els.pinSheet].some((x) => !x.hidden);
+}
+
+/* ---------- Biertempo ---------- */
+const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+const fmtTime = (ts) => new Date(ts).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+function fmtDur(ms) {
+  const m = Math.max(0, Math.round(ms / 60000));
+  if (m < 1) return "unter einer Minute";
+  if (m < 60) return `${m} ${m === 1 ? "Minute" : "Minuten"}`;
+  const hh = Math.floor(m / 60), mm = m % 60;
+  return mm ? `${hh} Std ${mm} Min` : `${hh} ${hh === 1 ? "Stunde" : "Stunden"}`;
+}
+function shortDur(ms) {
+  const m = Math.max(0, Math.round(ms / 60000));
+  return m < 60 ? `${m} Min` : `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")} Std`;
+}
+// Alle tatsächlich geholten Biere ab einem Zeitpunkt, zeitlich sortiert
+function beerLog(from = 0) {
+  const out = [];
+  for (const r of allRoundsAll()) {
+    for (const k of r.picks) if (!k.absent && k.at >= from) out.push({ id: k.id, at: k.at });
+    const f = r.final;
+    if (f && f.loser && !f.forfeit && f.endedAt && f.endedAt >= from) out.push({ id: f.loser, at: f.endedAt });
+  }
+  for (const d of state.debts) if (d.settledAt && d.settledAt >= from) out.push({ id: d.playerId, at: d.settledAt });
+  return out.sort((a, b) => a.at - b.at);
+}
+// Abstände zwischen zwei Bieren am selben Abend
+function gapsOf(log) {
+  const g = [];
+  for (let i = 1; i < log.length; i++) {
+    if (dayStart(log[i].at) !== dayStart(log[i - 1].at)) continue;
+    g.push({ ms: log[i].at - log[i - 1].at, at: log[i].at, id: log[i].id });
+  }
+  return g;
+}
+function sinceLastBeer() {
+  const log = beerLog(dayStart());
+  return log.length ? Date.now() - log[log.length - 1].at : null;
+}
+function tempoBucket(ms) {
+  const m = ms / 60000;
+  return m < 10 ? "turbo" : m < 20 ? "fast" : m < 35 ? "normal" : m < 60 ? "slow" : "drought";
+}
+function tempoLine() {
+  const gap = sinceLastBeer();
+  if (gap == null) return { label: "Anstich", text: pick(TEMPO_QUIPS.first) };
+  return { label: `Takt · ${shortDur(gap)}`, text: cap(pick(TEMPO_QUIPS[tempoBucket(gap)]).replace("{t}", fmtDur(gap))) };
+}
+function lastBeerNote() {
+  const gap = sinceLastBeer();
+  return gap == null ? "" : ` Letztes Bier vor ${fmtDur(gap)}.`;
+}
+function timeline(log) {
+  const start = log[0].at;
+  const end = Math.max(log[log.length - 1].at, start + 60000);
+  const wrap = h("div", "timeline");
+  const track = h("div", "tl-track");
+  for (const e of log) {
+    const i = infoOf(e.id);
+    const d = h("span", "tl-dot");
+    d.style.setProperty("--c", i.color);
+    d.style.left = `${((e.at - start) / (end - start)) * 100}%`;
+    d.title = `${fmtTime(e.at)} ${i.name}`;
+    track.append(d);
+  }
+  const axis = h("div", "tl-axis");
+  axis.append(h("span", null, fmtTime(start)), h("span", null, `${log.length} ${beerWord(log.length)}`), h("span", null, fmtTime(end)));
+  wrap.append(track, axis);
+  return wrap;
+}
+function record(label, value, meta) {
+  const li = h("li");
+  li.append(h("span", "rec-label", label), h("span", "rec-value", value), h("span", "rec-meta", meta));
+  return li;
+}
+function renderTempo() {
+  const box = els.tempo;
+  box.replaceChildren();
+  const today = beerLog(dayStart());
+  const season = beerLog(seasonStartOf());
+  if (!today.length && !season.length) {
+    box.append(h("p", "empty", "Sobald Biere geholt werden, misst die App hier den Takt zwischen den Bieren."));
+    return;
+  }
+  if (today.length) {
+    const g = gapsOf(today);
+    const k = h("div", "kpis");
+    k.append(kpi("Heute", String(today.length), `${beerWord(today.length)} seit ${fmtTime(today[0].at)}`));
+    if (g.length) {
+      const avg = g.reduce((t, x) => t + x.ms, 0) / g.length;
+      const fast = g.reduce((a, b) => (b.ms < a.ms ? b : a));
+      const fi = infoOf(fast.id);
+      k.append(kpi("Ø Takt", shortDur(avg), "zwischen zwei Bieren"));
+      k.append(kpi("Bestzeit", shortDur(fast.ms), fi.name, fi.color));
+    } else {
+      k.append(kpi("Ø Takt", "–", "ab zwei Bieren"));
+      k.append(kpi("Bestzeit", "–", "ab zwei Bieren"));
+    }
+    box.append(k, timeline(today));
+  } else {
+    box.append(h("p", "empty", "Heute wurde noch kein Bier geholt."));
+  }
+  const sg = gapsOf(season);
+  if (sg.length) {
+    const fast = sg.reduce((a, b) => (b.ms < a.ms ? b : a));
+    const slow = sg.reduce((a, b) => (b.ms > a.ms ? b : a));
+    const avg = sg.reduce((t, x) => t + x.ms, 0) / sg.length;
+    const ul = h("ul", "records");
+    ul.append(
+      record("Schnellstes Bier der Saison", shortDur(fast.ms), `${infoOf(fast.id).name} · ${fmtDay(fast.at)}, ${fmtTime(fast.at)}`),
+      record("Längste Durststrecke", shortDur(slow.ms), `bis ${infoOf(slow.id).name} holte · ${fmtDay(slow.at)}, ${fmtTime(slow.at)}`),
+      record("Ø Takt der Saison", shortDur(avg), `aus ${sg.length} Abständen an ${new Set(season.map((x) => dayStart(x.at))).size} Abenden`)
+    );
+    box.append(ul);
+  }
+}
+// Ticker in Ruhe regelmäßig auffrischen („Letztes Bier vor …“)
+setInterval(() => {
+  if (document.visibilityState !== "visible" || ui.tab !== "game" || ui.spinning || ui.shooting || ui.sheetFor) return;
+  const t = tickerFor(viewMode());
+  setTicker(t.label, t.text);
+}, 30000);
+
+/* ---------- Admin ---------- */
+const ADMIN_WINDOW = 60 * 1000;   // nach der PIN-Eingabe eine Minute frei
+let adminUntil = 0;
+const pinFlow = { mode: null, cb: null };
+const hasAdmin = () => !!root.admin;
+function toHex(bytes) {
+  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function hashPin(pin, salt) {
+  const data = new TextEncoder().encode(salt + ":" + pin);
+  if (crypto.subtle) return toHex(new Uint8Array(await crypto.subtle.digest("SHA-256", data)));
+  // Notlösung ohne sichere Verbindung (nur lokal beim Testen)
+  let x = 0x811c9dc5;
+  for (const b of data) x = Math.imul(x ^ b, 16777619) >>> 0;
+  return x.toString(16).padStart(8, "0").repeat(8);
+}
+function randomSalt() {
+  const a = new Uint8Array(16);
+  crypto.getRandomValues(a);
+  return toHex(a);
+}
+// Führt eine geschützte Aktion aus – mit PIN, falls ein Admin festgelegt ist
+function requireAdmin(what, fn) {
+  if (!hasAdmin() || Date.now() < adminUntil) { fn(); return; }
+  openPin("check", what, fn);
+}
+function openPin(mode, what, cb) {
+  pinFlow.mode = mode;
+  pinFlow.cb = cb || null;
+  els.pinInput.value = "";
+  els.pinInput2.value = "";
+  els.pinInput2.hidden = mode !== "set";
+  els.pinTitle.textContent = mode === "set" ? "Neue Admin-PIN" : "Admin-PIN";
+  els.pinNote.textContent = mode === "set"
+    ? "4 bis 8 Ziffern, zweimal eingeben. Gut merken: Ohne PIN lassen sich diese Funktionen nicht mehr freischalten."
+    : `${what} darf nur der Admin.`;
+  els.pinOk.textContent = mode === "set" ? "Speichern" : "Freischalten";
+  els.pinSheet.hidden = false;
+  els.sheetBackdrop.hidden = false;
+  setTimeout(() => els.pinInput.focus(), 80);
+}
+function closePin() {
+  els.pinSheet.hidden = true;
+  pinFlow.mode = null;
+  pinFlow.cb = null;
+  syncBackdrop();
+}
+async function submitPin() {
+  const pin = els.pinInput.value.trim();
+  if (!/^[0-9]{4,8}$/.test(pin)) { toast("Die PIN hat 4 bis 8 Ziffern."); return; }
+  const cb = pinFlow.cb;
+  if (pinFlow.mode === "set") {
+    if (pin !== els.pinInput2.value.trim()) { toast("Die beiden Eingaben sind unterschiedlich."); return; }
+    const salt = randomSalt();
+    root.admin = { salt, hash: await hashPin(pin, salt) };
+    adminUntil = Date.now() + ADMIN_WINDOW;
+    persist();
+    closePin();
+    toast("Admin-PIN gespeichert.");
+    renderSquad();
+    if (cb) cb();
+    return;
+  }
+  if (!root.admin || (await hashPin(pin, root.admin.salt)) !== root.admin.hash) {
+    els.pinInput.value = "";
+    toast("Falsche PIN.");
+    buzz(150);
+    return;
+  }
+  adminUntil = Date.now() + ADMIN_WINDOW;
+  closePin();
+  if (cb) cb();
+}
+
+/* ---------- Meisterschaften ---------- */
+const busyNow = () => ui.spinning || ui.shooting || !!ui.sheetFor;
+function lastChampOf(c) {
+  const r = c.rounds[c.rounds.length - 1];
+  if (!r) return null;
+  const id = r.final.winner;
+  const p = c.players.find((x) => x.id === id) || r.pot.find((x) => x.id === id);
+  return p ? p.name : null;
+}
+function resetUi() {
+  disarm();
+  closeSheet();
+  resetGoal();
+  wheel.highlight(null);
+  ui.playingId = null;
+  ui.champRoundId = null;
+  ui.newChamp = false;
+  ui.finalLine = null;
+  ui.wheelSig = "";
+  ui.seasonStart = null;
+  ui.renaming = null;
+}
+function openComp() {
+  if (busyNow()) return;
+  ui.renaming = null;
+  els.compInput.value = "";
+  els.compCopy.checked = true;
+  els.compFca.checked = false;
+  renderCompList();
+  els.compSheet.hidden = false;
+  els.sheetBackdrop.hidden = false;
+}
+function closeComp() {
+  els.compSheet.hidden = true;
+  ui.renaming = null;
+  syncBackdrop();
+}
+function renderCompList() {
+  els.compList.replaceChildren();
+  for (const c of root.competitions) {
+    const active = c.id === state.id;
+    const li = h("li", "comp" + (active ? " is-active" : ""));
+    if (ui.renaming === c.id) {
+      const f = h("form", "comp-rename");
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.id = "renameInput";
+      inp.maxLength = 24;
+      inp.value = c.name;
+      inp.setAttribute("aria-label", "Neuer Name");
+      const ok = h("button", "mini-btn", "OK");
+      ok.type = "submit";
+      f.append(inp, ok);
+      f.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const name = cleanTitle(inp.value);
+        if (name) c.name = name;
+        ui.renaming = null;
+        persist();
+        renderCompList();
+        renderChrome();
+      });
+      li.append(f);
+      els.compList.append(li);
+      setTimeout(() => inp.focus(), 40);
+      continue;
+    }
+    const main = h("button", "comp-main");
+    main.type = "button";
+    const champ = lastChampOf(c);
+    const n = c.rounds.length;
+    main.append(
+      h("span", "comp-name", c.name),
+      h("span", "comp-meta", `${n} ${n === 1 ? "Runde" : "Runden"} · ${champ ? "Champion " + champ : "noch kein Champion"}` + (active ? " · aktiv" : ""))
+    );
+    main.addEventListener("click", () => switchComp(c.id));
+    li.append(main);
+    const acts = h("div", "comp-actions");
+    if (active) acts.append(btn("mini-btn ghost", "Umbenennen", () => { ui.renaming = c.id; renderCompList(); }));
+    if (root.competitions.length > 1) {
+      const key = "comp:" + c.id;
+      const armed = ui.armed === key;
+      const del = btn("icon-btn" + (armed ? " is-armed" : ""), armed ? "Löschen?" : "×", () => {
+        if (ui.armed === key) { disarm(); requireAdmin("Meisterschaft löschen", () => deleteComp(c.id)); }
+        else { arm(key); renderCompList(); }
+      });
+      del.setAttribute("aria-label", armed ? `${c.name} mit allen Daten löschen` : `${c.name} löschen`);
+      acts.append(del);
+    }
+    li.append(acts);
+    els.compList.append(li);
+  }
+}
+function switchComp(id) {
+  if (busyNow()) return;
+  if (id === state.id) { closeComp(); return; }
+  const c = root.competitions.find((x) => x.id === id);
+  if (!c) return;
+  resetUi();
+  root.activeId = c.id;
+  state = c;
+  persist();
+  closeComp();
+  renderAll(true);
+  toast(`Jetzt aktiv: ${c.name}`);
+}
+function createComp() {
+  const name = cleanTitle(els.compInput.value);
+  if (!name) { toast("Bitte einen Namen eingeben."); return; }
+  if (root.competitions.length >= MAX_COMPS) { toast(`Höchstens ${MAX_COMPS} Meisterschaften.`); return; }
+  if (root.competitions.some((c) => c.name.toLowerCase() === name.toLowerCase())) { toast(`„${name}“ gibt es schon.`); return; }
+  const players = els.compCopy.checked ? state.players.map((p) => ({ ...p })) : [];
+  const c = newCompetition(name, els.compFca.checked, players);
+  root.competitions.push(c);
+  persist();
+  switchComp(c.id);
+  if (!players.length) toast(`„${name}“ angelegt. Trag im Kader die Mitspieler ein.`);
+}
+function deleteComp(id) {
+  const c = root.competitions.find((x) => x.id === id);
+  if (!c || root.competitions.length < 2) return;
+  root.competitions = root.competitions.filter((x) => x.id !== id);
+  if (state.id === id) {
+    resetUi();
+    state = root.competitions[0];
+    root.activeId = state.id;
+  }
+  persist();
+  toast(`„${c.name}“ gelöscht.`);
+  renderCompList();
+  renderAll(true);
+}
+
 /* ---------- Bereiche ---------- */
 const views = { game: $("view-game"), stats: $("view-stats"), squad: $("view-squad") };
 function switchTab(tab) {
@@ -1509,21 +1883,36 @@ function renderAll(animate) {
 
 /* ---------- Ereignisse ---------- */
 els.cta.addEventListener("click", onCta);
-els.undoBtn.addEventListener("click", undoLast);
+els.undoBtn.addEventListener("click", () => requireAdmin("Rückgängig", undoLast));
 els.presenceBtn.addEventListener("click", () => openPresence(null));
 els.presenceOk.addEventListener("click", () => closePresence(true));
 els.presenceCancel.addEventListener("click", () => closePresence(false));
 els.sheetNext.addEventListener("click", sheetNext);
-els.sheetUndo.addEventListener("click", undoLast);
-els.sheetBackdrop.addEventListener("click", () => {
-  if (!els.presenceSheet.hidden) closePresence(false);
-  else sheetNext();
-});
-document.addEventListener("keydown", (e) => {
-  if (e.key !== "Escape") return;
-  if (!els.presenceSheet.hidden) closePresence(false);
+els.sheetUndo.addEventListener("click", () => requireAdmin("Rückgängig", undoLast));
+function closeTopSheet() {
+  if (!els.pinSheet.hidden) closePin();
+  else if (!els.compSheet.hidden) closeComp();
+  else if (!els.presenceSheet.hidden) closePresence(false);
   else if (ui.sheetFor) sheetNext();
+}
+els.sheetBackdrop.addEventListener("click", closeTopSheet);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeTopSheet(); });
+els.compBtn.addEventListener("click", openComp);
+els.compClose.addEventListener("click", closeComp);
+els.compForm.addEventListener("submit", (e) => { e.preventDefault(); createComp(); });
+els.pinForm.addEventListener("submit", (e) => { e.preventDefault(); submitPin(); });
+els.pinCancel.addEventListener("click", closePin);
+els.adminSet.addEventListener("click", () => {
+  if (hasAdmin()) requireAdmin("PIN ändern", () => openPin("set"));
+  else openPin("set");
 });
+els.adminRemove.addEventListener("click", () => requireAdmin("PIN entfernen", () => {
+  root.admin = null;
+  adminUntil = 0;
+  persist();
+  toast("Admin-PIN entfernt. Alle dürfen wieder alles.");
+  renderSquad();
+}));
 document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => {
   if (ui.spinning || ui.shooting) return;
   switchTab(b.dataset.tab);
@@ -1546,6 +1935,9 @@ els.guestForm.addEventListener("submit", (e) => {
 els.abortBtn.addEventListener("click", () => {
   if (ui.armed !== "abort") { arm("abort"); renderSquad(); return; }
   disarm();
+  requireAdmin("Runde abbrechen", abortRound);
+});
+function abortRound() {
   if (state.round) state.debts = state.debts.filter((d) => d.roundId !== state.round.id || d.settledAt);
   state.round = null;
   ui.finalLine = null;
@@ -1553,10 +1945,13 @@ els.abortBtn.addEventListener("click", () => {
   toast("Runde abgebrochen. Die nächste startet mit dem aktuellen Kader.");
   renderSquad();
   renderGame(false);
-});
+}
 els.resetBtn.addEventListener("click", () => {
   if (ui.armed !== "reset") { arm("reset"); renderSquad(); return; }
   disarm();
+  requireAdmin("Statistik zurücksetzen", resetStats);
+});
+function resetStats() {
   state.rounds = [];
   state.round = null;
   state.pending = [];
@@ -1565,22 +1960,23 @@ els.resetBtn.addEventListener("click", () => {
   ui.playingId = null;
   ui.champRoundId = null;
   persist();
-  toast("Statistik gelöscht. Der Kader bleibt.");
+  toast(`Statistik von „${state.name}“ gelöscht. Der Kader bleibt.`);
   renderSquad();
   renderGame(false);
-});
+}
 els.soundToggle.addEventListener("change", () => {
-  state.settings.sound = els.soundToggle.checked;
-  if (state.settings.sound) unlockAudio();
+  root.settings.sound = els.soundToggle.checked;
+  if (root.settings.sound) unlockAudio();
   persist();
 });
 els.vibeToggle.addEventListener("change", () => {
-  state.settings.vibrate = els.vibeToggle.checked;
+  root.settings.vibrate = els.vibeToggle.checked;
   persist();
 });
 
 /* ---------- Start ---------- */
 els.version.textContent = APP_VERSION;
+persist(); // ältere Speicherstände gleich im neuen Format sichern
 if (state.round && state.round.final && state.round.final.winner && !state.rounds.some((r) => r.id === state.round.id)) {
   state.rounds.push(clone(state.round));
   persist();
