@@ -7,6 +7,7 @@
 export const STEP = 0.25;               // Feldänderung pro Frage
 export const MIN_W = 0.25;              // kleinstes Feld (nie ganz weg)
 export const LOCK_GRACE = 3 * 60000;    // getippt werden darf bis 3 Minuten nach Anpfiff
+export const HALF_AFTER = 60;           // Halbzeit-Frage frühestens 60 Minuten nach Anpfiff auswerten
 export const API = "https://api.openligadb.de";
 export const LEAGUES = ["bl1", "bl2"];  // hier wird das heutige FCA-Spiel gesucht
 const FCA_ID = 95;                      // FC Augsburg in OpenLigaDB
@@ -205,11 +206,15 @@ export function evaluate(m, now) {
   else if (total === 0 && (after(42) || m.finished)) out.early = "no";
 
   // Führt der FCA zur Halbzeit? Unentschieden heißt Nein.
-  if (m.half && (after(50) || m.finished)) out.half = m.half.f > m.half.o ? "yes" : "no";
-  else if ((after(75) || m.finished) && complete && goals.every(known)) {
-    const firstHalf = goals.filter((g) => g.min <= 45);
-    const last = firstHalf[firstHalf.length - 1];
-    out.half = last && last.f > last.o ? "yes" : "no";
+  // Erst eine Stunde nach Anpfiff: Dann ist die erste Halbzeit auch mit langer Nachspielzeit sicher vorbei.
+  // Der Halbzeitstand zählt nur, wenn er zu den Toren passt. Bei OpenLigaDB steht dort bis zum Pausenpfiff
+  // teils ein Platzhalter (22.11.2026 gegen Mainz: 50 Minuten nach Anpfiff noch „kein Vorsprung“, richtig war 2:0).
+  if (after(HALF_AFTER) || m.finished) {
+    const firstHalf = goals.filter((g) => known(g) && g.min <= 45);
+    const byGoals = firstHalf.length ? firstHalf[firstHalf.length - 1] : { f: 0, o: 0 };
+    const fits = (s) => !!s && s.f >= byGoals.f && s.o >= byGoals.o && (!m.cur || (s.f <= m.cur.f && s.o <= m.cur.o));
+    if (fits(m.half)) out.half = m.half.f > m.half.o ? "yes" : "no";
+    else if ((after(75) || m.finished) && complete && goals.every(known)) out.half = byGoals.f > byGoals.o ? "yes" : "no";
   }
   return out;
 }

@@ -41,7 +41,7 @@
 | `js/sync.js` | Gemeinsamer Stand über Firebase: Hochladen per Transaktion, Zusammenführen (`merge3`), Gruppe anlegen/beitreten |
 | `vendor/firebase/` | Firebase JS SDK 13.1.0 (app, auth, firestore), unverändert bis auf die Importpfade |
 | `firestore.rules` | Sicherheitsregeln (in der Konsole unter Firestore → Regeln veröffentlicht; bei Änderung dort neu einfügen) |
-| `tests/` | Zwei-Handy-Test mit nachgebauter Firebase (`tests/README.md`) |
+| `tests/` | Zwei-Handy- und Tipp-Test mit nachgebauter Firebase, Regel-Tests ohne Browser (`tests/README.md`) |
 
 ### Datenmodell (`js/store.js`)
 
@@ -74,6 +74,8 @@ Gespeichert wird ein Objekt `{version: 2, activeId, competitions, settings, admi
 - Keine Kartendaten. Deshalb ist die Frage „Gelbe Karte“ durch „Führt der FCA zur Halbzeit?“ ersetzt (mit Daniel abgestimmt, 08.11.2026).
 - Aus der Claude-Umgebung ist OpenLigaDB gesperrt. Getestet wird mit nachgestellten Antworten (Playwright `route`). Echte Daten zeigen sich erst am Spieltag.
 - Auflösungen erscheinen als eigenes Fenster (`revealSheet`); das Rad wächst/schrumpft erst nach dem Schließen (`ui.revealing` hält `syncWheel` an).
+- Halbzeit-Frage frühestens `HALF_AFTER` = 60 Minuten nach Anpfiff und nur, wenn der Halbzeitstand zu den Toren bis zur 45. passt. Grund: Am 22.11.2026 stand bei OpenLigaDB bis zum Pausenpfiff ein Platzhalter (0:0 statt 2:0), die App zeigte kurz das Gegenteil.
+- Tippen dürfen alle eingeschalteten Stammspieler, auch wer fehlt (`tipPeople`), dazu anwesende Gäste.
 
 ## Lokal testen
 
@@ -91,7 +93,11 @@ Dann `http://localhost:8080` öffnen und in den Entwicklertools die Handy-Ansich
 - `persist(quiet)` speichert lokal und meldet die Änderung an `SYNC.changed`. Automatische Änderungen (Gäste in den Topf, Finale starten, Tippspiel anlegen, Live-Daten) mit `quiet = true`: werden sie verworfen, gibt es keine Meldung.
 - Drehen und Schießen: Ergebnis erst festlegen und mit `SYNC.commitNow` hochladen, dann animieren. „conflict“ = ein anderes Handy war schneller → Meldung, dessen Stand wird nachgespielt. „offline“ = hier weiterspielen, später nachtragen.
 - Zusammenführen (`merge3` in `js/sync.js`): Felder einzeln, Listen mit `id` (Kader, Schulden, Topf) eintragsweise. Gleichzeitige Änderungen an `round.picks`, `round.final`, `pending`, `lastDone` oder Runde beendet vs. weitergedreht = Konflikt (fremder Stand gilt).
+- Tippspiel (`mergeTipp`): verschiedene Abende → der neuere gilt; gleicher Abend → Tipps je Spieler (späterer gewinnt ganz), Ergebnisse je Frage (von Hand vor Live). Bei Konflikt rettet `keepTips` die eigenen Tipps in den fremden Stand und lädt sie nach.
+- Übergabe an die App mit Nummer (`deliver` → `info.seq`). Bis die App den Stand übernommen hat (`SYNC.applied`, nach einer laufenden Animation), lädt das Handy nichts hoch (`"wait"`); sonst überschrieb der alte Stand im Speicher fremde Änderungen (so konnte ein Tipp verloren gehen, der während eines Drehs ankam).
+- Nachsenden ohne Netz: nach 3 s, dann doppelt so lange bis 20 s; sofort bei `online`, `visibilitychange`, `pageshow`, `focus`. `SYNC.tipSent(cid, pid)` sagt, ob ein Tipp schon im bestätigten Stand steht (Anzeige „nicht gesendet“).
+- In der Gruppe steht `?g=CODE` immer in der Adresse (`history.replaceState`), das Manifest hat kein `start_url` mehr (nur `id`). So nimmt „Zum Home-Bildschirm“ die Runde mit. Start als Home-Bildschirm-App ohne Gruppe und ohne eigene Daten → Fenster „Mit eurer Runde verbinden“ (`openConnect`, einmal, Merker `fca-bier-roulette:connect-asked`).
 - Fremde Änderungen: `hookRemote` → Warteschlange (`ui.remoteQ`, nie während einer Animation) → `applyRemote` erkennt neuen Dreh/Schuss/Champion (`remoteEvents`) und spielt ihn nach (`remoteSpin` mit `ui.hidePick`, `remoteShot`).
 - Admin-PIN liegt in `groups/{code}.admin` und gilt für alle Handys der Gruppe. Prüfung nur in der App (Schutz vor Versehen, nicht vor Technikern).
-- iPhone: Die App auf dem Home-Bildschirm hat einen eigenen Speicher. Wer sie dort ohne Gruppe öffnet, fügt den Link unter Kader → Gemeinsam spielen ein.
-- Testen: `tests/zwei_handys.py` mit nachgebauter Firebase. Die echte Datenbank ist aus der Claude-Umgebung nicht erreichbar; ein Kurztest gegen Firebase geht über Daniels Chrome auf der GitHub-Pages-Seite.
+- iPhone: Die App auf dem Home-Bildschirm hat einen eigenen Speicher. Wer sie dort ohne Gruppe öffnet, wird nach dem Link gefragt (sonst Kader → Gemeinsam spielen).
+- Testen: `tests/zwei_handys.py` und `tests/tipps.py` mit nachgebauter Firebase, Regeln ohne Browser mit `node tests/tippspiel.mjs`, `node tests/abgleich.mjs`, `node tests/rad.mjs`. Die echte Datenbank ist aus der Claude-Umgebung nicht erreichbar; ein Kurztest gegen Firebase geht über Daniels Chrome auf der GitHub-Pages-Seite. Warten in Playwright-Tests immer mit `page.wait_for_timeout`, nicht `time.sleep` (sonst antwortet die Test-Datenbank nicht).

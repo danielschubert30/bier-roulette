@@ -596,6 +596,12 @@ button { touch-action: manipulation; }
 .tt-wrong { color: var(--bad-ink); background: var(--bad); }
 .tt-void { color: var(--chalk-3); text-decoration: line-through; }
 .tt-w { font-weight: 700; white-space: nowrap; }
+.tipp-ok.is-wait { background: transparent; border-style: dashed; font-weight: 500; line-height: 1.35; }
+.tipp-ok.is-wait .ico { color: var(--gold); }
+.tipp-person.is-wait .tipp-state { color: var(--gold); }
+.tipp-warn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px 4px; border-radius: 12px; border: 1px dashed var(--gold); }
+.tipp-warn p { margin: 0; font-size: 14px; line-height: 1.4; color: var(--chalk-2); }
+.tipp-warn .link-btn { min-height: 44px; }
 .tipp-ok { display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--gold-soft); border: 1px solid var(--gold); color: var(--chalk); font-weight: 600; }
 .tipp-ok .ico { color: var(--good); width: 18px; height: 18px; }
 .sheet-reveal:not([hidden]) .tipp-ok { animation: none; }
@@ -640,6 +646,9 @@ button { touch-action: manipulation; }
 .group-join input { height: 46px; font-size: 16px; }
 .group-join .btn { height: 46px; }
 .group-text { margin: 0 0 10px; font-size: 15px; line-height: 1.45; color: var(--chalk-2); }
+.group-connect { margin: 0 0 12px; }
+.group-connect input { width: 100%; height: 50px; padding: 0 14px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--gold); font-size: 16px; }
+.group-connect input::placeholder { color: var(--chalk-3); }
 .group-link { margin: 0 0 12px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); border: 1px dashed var(--gold); font-size: 13px; overflow-wrap: anywhere; user-select: all; -webkit-user-select: all; }
 .loading { position: fixed; inset: 0; z-index: 35; display: grid; place-items: center; padding: 24px; background: var(--night); }
 .loading-box { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; max-width: 320px; }

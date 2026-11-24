@@ -1,6 +1,6 @@
 # Anforderungen – FCA Bier-Roulette
 
-Stand: 08.11.2026 · Auftraggeber: Daniel · Einsatz: im Stadion während FCA-Spielen, am Handy
+Stand: 24.11.2026 · Auftraggeber: Daniel · Einsatz: im Stadion während FCA-Spielen, am Handy
 
 Legende: `[x]` umgesetzt · `[ ]` offen
 
@@ -76,12 +76,15 @@ Legende: `[x]` umgesetzt · `[ ]` offen
 ## F – Tippspiel (beauftragt 08.11.2026)
 
 - [x] **F1 Drei feste Fragen**, früh im Spiel entschieden: „Wer trifft zuerst?“ (FCA / Gegner; fällt kein Tor, zählt die Frage nicht), „Fällt ein Tor bis zur 30. Minute?“ (Ja / Nein, egal welches Team), „Führt der FCA zur Halbzeit?“ (Ja / Nein, Unentschieden = Nein). Die Frage nach der ersten Gelben Karte wurde durch die Halbzeit-Frage ersetzt, weil Karten in den kostenlosen Live-Daten fehlen.
-- [x] **F2 Verdeckt tippen:** Leiste „Tippspiel“ unter den Namen. Jeder Anwesende tippt für sich, dann geht das Handy weiter. Die Tipps schließen 3 Minuten nach Anpfiff (mit Live-Daten automatisch, sonst über „Tipps zu“).
+- [x] **F2 Verdeckt tippen:** Leiste „Tippspiel“ unter den Namen. Jeder Anwesende tippt für sich, dann geht das Handy weiter. Stammspieler, die fehlen, tippen mit dem Link von zu Hause (ihr Feld ist ja auf dem Rad; seit 1.6.0, nach dem ersten Einsatz am 22.11.2026). Die Tipps schließen 3 Minuten nach Anpfiff (mit Live-Daten automatisch, sonst über „Tipps zu“).
 - [x] **F3 Wirkung aufs Rad:** Jede richtige Antwort macht das eigene Feld ein Viertel kleiner, jede falsche ein Viertel größer (25 % bis 175 %). Feldgröße = Wahrscheinlichkeit, gezogen zu werden. Gilt den ganzen Abend; ohne Tipp bleibt das Feld normal. Das Finale (Elfmeterschießen) ist davon nicht betroffen.
-- [x] **F4 Automatisch auflösen** über OpenLigaDB: Die App sucht das heutige FCA-Spiel in der 1. und 2. Liga und fragt ab Anpfiff einmal pro Minute den Stand ab. „Kein Tor bis zur 30.“ frühestens 42 Minuten nach Anpfiff, Halbzeit frühestens nach 50 Minuten (Puffer für spätes Eintragen). Pokal- und Testspiele stehen dort nicht, dann per Knopf.
+- [x] **F4 Automatisch auflösen** über OpenLigaDB: Die App sucht das heutige FCA-Spiel in der 1. und 2. Liga und fragt ab Anpfiff einmal pro Minute den Stand ab. „Kein Tor bis zur 30.“ frühestens 42 Minuten nach Anpfiff. Halbzeit frühestens 60 Minuten nach Anpfiff und nur, wenn der Halbzeitstand zu den Toren passt (am 22.11.2026 stand bei 6 Minuten Nachspielzeit nach 50 Minuten noch ein Platzhalter drin, die App zeigte kurz „FCA führt nicht“). Pokal- und Testspiele stehen dort nicht, dann per Knopf.
 - [x] **F5 Per Knopf auflösen:** Wer es im Stadion sieht, tippt das Ergebnis an (schneller als der Live-Ticker). Sperren: „Nein“ bei Frage 2 ab der 30. Minute, Frage 3 ab der Halbzeit, „Kein Tor“ ab der 90. Minute. Direkt danach „Doch nicht“ möglich; später ändern nur mit Admin-PIN. Melden die Live-Daten etwas anderes als von Hand eingetragen, erscheint ein Hinweis mit „Übernehmen“.
 - [x] **F6 Sofort sichtbar:** Bei jeder Auflösung ein Fenster: Ergebnis, wer richtig lag (Feld −25 %) und wer daneben (Feld +25 %). Danach wachsen und schrumpfen die Felder sichtbar. An jedem Namen drei Punkte (grün richtig, rot daneben, leer offen), in der Leiste „x von 3 entschieden“, im Ticker die Risiko-Spanne. Im Tipp-Fenster eine Tabelle mit allen Tipps und Feldgrößen.
 - [x] **F7 Nur bei Meisterschaften mit „FCA-Spieltag“.** Frühere Tippspiele werden gespeichert (für eine spätere Statistik).
+- [x] **F8 Tipps kommen sicher an** (1.6.0, nach dem 22.11.2026: 2 von 6 Tipps fehlten): Abgegebene Tipps gehen beim Zusammenführen nie verloren, auch nicht bei einem Zusammenstoß oder wenn ein anderes Handy gerade das Rad dreht. Ohne Netz steht am Tipp „nicht gesendet“ und in der Leiste „1 Tipp noch nicht gesendet“; sobald Netz da ist, schickt die App ihn (erst nach 3 Sekunden, dann immer seltener, sofort beim Zurückkehren in die App). Ein Handy ohne Gruppe zeigt im Tippspiel eine Warnung mit „Einladungslink einfügen“.
+- [x] **F9 Home-Bildschirm-App findet die Runde:** Die Adresse enthält jetzt immer den Einladungslink, so nimmt „Zum Home-Bildschirm“ die Runde mit. Startet die App vom Home-Bildschirm ohne Runde (eigener Speicher am iPhone), fragt sie einmal nach dem Link.
+- [ ] **F10 Tippen für Ausgeschiedene:** Wer in der laufenden Runde schon raus ist, hat vom Tippen nichts. Ideen von Daniel (24.11.2026): Pate zulosen oder selbst wählen, wem die Tipps gutgeschrieben werden. Entscheidung offen.
 
 ## Ideen-Speicher (noch nicht beauftragt)
 

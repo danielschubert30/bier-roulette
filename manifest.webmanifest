@@ -3,7 +3,7 @@
   "short_name": "Bier-Roulette",
   "description": "Wer holt das nächste Bier? Das Glücksrad für die FCA-Runde.",
   "lang": "de",
-  "start_url": "./",
+  "id": "/bier-roulette/",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",

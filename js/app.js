@@ -6,7 +6,7 @@ import * as TP from "./tipp.js";
 import * as SO from "./shootout.js";
 import { SPIN_QUIPS, RESULT_QUIPS, FINAL_INTROS, CHAMPION_QUIPS, SHOT_TEXT, FCA_FACTS, TEMPO_QUIPS } from "./content.js";
 
-const APP_VERSION = "1.5.0";
+const APP_VERSION = "1.6.0";
 const NS = "http://www.w3.org/2000/svg";
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const $ = (id) => document.getElementById(id);
@@ -41,7 +41,7 @@ const els = {
   revealSheet: $("revealSheet"), revealLabel: $("revealLabel"), revealTitle: $("revealTitle"), revealSrc: $("revealSrc"),
   revealBody: $("revealBody"), revealActions: $("revealActions"),
   syncDot: $("syncDot"), storeNote: $("storeNote"), groupInfo: $("groupInfo"), groupActions: $("groupActions"),
-  joinForm: $("joinForm"), joinInput: $("joinInput"),
+  joinForm: $("joinForm"), joinInput: $("joinInput"), connectForm: $("connectForm"), connectInput: $("connectInput"),
   groupSheet: $("groupSheet"), groupTitle: $("groupTitle"), groupText: $("groupText"), groupLink: $("groupLink"),
   groupSheetActions: $("groupSheetActions"), loading: $("loading"), loadingText: $("loadingText"), loadingBtn: $("loadingBtn")
 };
@@ -2014,11 +2014,18 @@ function tipPerson(g, pid) {
   const t = g.tips[pid];
   return { id: pid, name: t ? t.name : "?", color: t ? t.color : PALETTE[0] };
 }
-// Wer heute tippen kann: anwesende Stammspieler und Gäste, dazu alle, die schon getippt haben
+// Wer heute tippen kann: alle Stammspieler, die mitspielen (wer fehlt, tippt von zu Hause, sein Feld ist ja auf dem Rad),
+// anwesende Gäste, dazu alle, die schon getippt haben. Anwesende zuerst.
 function tipPeople(g) {
-  const list = activePlayers().filter((p) => isPresent(p.id)).concat(presentGuests());
+  const regs = activePlayers();
+  const list = regs.filter((p) => isPresent(p.id)).concat(presentGuests(), regs.filter((p) => !isPresent(p.id)));
   if (g) for (const pid of Object.keys(g.tips)) if (!list.some((p) => p.id === pid)) list.push(tipPerson(g, pid));
   return list;
+}
+// Tipps, die auf diesem Handy abgegeben, aber noch nicht beim Server angekommen sind
+function unsentTips(g) {
+  if (!GROUP || !g) return [];
+  return Object.keys(g.tips).filter((pid) => SYNC.tipSent(state.id, pid) === false);
 }
 function icon(id, cls) {
   const s = svg("svg", { class: cls || "ico", "aria-hidden": "true" });
@@ -2067,7 +2074,10 @@ function renderTipBar() {
   els.tippMatch.textContent = m ? `gegen ${m.opp}` + (locked ? "" : ` · ${kickText(m.kickoff)}`) : "";
   els.tippQs.replaceChildren();
   let sub;
-  if (!locked) {
+  const unsent = unsentTips(g).length;
+  if (unsent) {
+    sub = unsent === 1 ? "1 Tipp noch nicht gesendet" : `${unsent} Tipps noch nicht gesendet`;
+  } else if (!locked) {
     sub = n ? `${n} von ${Math.max(n, tipPeople(g).length)} haben getippt` : "Vor dem Anpfiff tippen";
   } else {
     const done = TP.QUESTIONS.filter((q) => g.results[q.id]).length;
@@ -2078,7 +2088,7 @@ function renderTipBar() {
     }
   }
   els.tippSub.textContent = sub;
-  bar.classList.toggle("is-due", !locked && n === 0);
+  bar.classList.toggle("is-due", (!locked && n === 0) || unsent > 0);
 }
 
 /* Tipp-Fenster */
@@ -2126,23 +2136,40 @@ function renderTipp() {
 function renderTipList(g) {
   els.tippTitle.textContent = "Wer tippt?";
   els.tippNote.textContent = matchLine(g);
+  if (!GROUP) {
+    // Typischer Fall: App vom Home-Bildschirm, die noch nicht mit der Runde verbunden ist
+    const warn = h("div", "tipp-warn");
+    warn.append(h("p", null, "Nur auf diesem Handy: Tipps hier sieht kein anderes Handy. Spielt ihr gemeinsam, erst den Einladungslink einfügen."));
+    warn.append(btn("link-btn", "Einladungslink einfügen", () => { closeTipp(); openConnect(); }));
+    els.tippBody.append(warn);
+  }
   if (ui.tipDone) {
-    const ok = h("p", "tipp-ok");
-    ok.append(icon("i-check"), document.createTextNode(`${ui.tipDone} hat getippt. Handy weitergeben.`));
+    const sent = SYNC.tipSent(state.id, ui.tipDone.id);
+    const ok = h("p", "tipp-ok" + (sent === false ? " is-wait" : ""));
+    if (sent === false) {
+      ok.append(icon("i-wait"), document.createTextNode(`${ui.tipDone.name}: gespeichert, aber noch nicht gesendet. Die App schickt ihn, sobald Netz da ist. Bitte bis dahin offen lassen.`));
+    } else {
+      ok.append(icon("i-check"), document.createTextNode(`${ui.tipDone.name} hat getippt${sent ? ", der Tipp ist angekommen" : ""}. Handy weitergeben.`));
+    }
+    ok.setAttribute("role", "status");
     els.tippBody.append(ok);
   }
   const ul = h("ul", "tipp-people");
   const people = tipPeople(g);
   for (const p of people) {
     const done = !!g.tips[p.id];
+    const waiting = done && SYNC.tipSent(state.id, p.id) === false;
     const li = h("li");
-    const b = h("button", "tipp-person" + (done ? " is-done" : ""));
+    const b = h("button", "tipp-person" + (done ? " is-done" : "") + (waiting ? " is-wait" : ""));
     b.type = "button";
     b.style.setProperty("--c", p.color);
     const st = h("span", "tipp-state");
-    if (done) st.append(icon("i-check"), document.createTextNode("getippt"));
+    if (waiting) st.append(icon("i-wait"), document.createTextNode("nicht gesendet"));
+    else if (done) st.append(icon("i-check"), document.createTextNode("getippt"));
     else st.textContent = "Tippen";
-    b.append(h("span", "dot"), h("span", "player-name", p.name), st);
+    const nm = h("span", "player-name", p.name);
+    if (!p.guest && !isPresent(p.id)) nm.append(h("small", "player-meta", "heute nicht da, tippt von zu Hause"));
+    b.append(h("span", "dot"), nm, st);
     b.addEventListener("click", () => {
       ui.tipDone = null;
       ui.tipFor = p.id;
@@ -2154,10 +2181,10 @@ function renderTipList(g) {
     li.append(b);
     ul.append(li);
   }
-  if (!people.length) ul.append(h("li", "empty", "Heute ist noch niemand als anwesend eingetragen."));
+  if (!people.length) ul.append(h("li", "empty", "Im Kader spielt gerade niemand mit."));
   els.tippBody.append(ul);
   els.tippBody.append(btn("link-btn tipp-who", "Fehlt jemand? Anwesenheit ändern", () => { closeTipp(); openPresence(openTipp); }));
-  els.tippBody.append(h("p", "caption", "Drei Fragen, immer dieselben. Jede richtige Antwort macht dein Feld auf dem Rad ein Viertel kleiner, jede falsche ein Viertel größer. Gilt den ganzen Abend."));
+  els.tippBody.append(h("p", "caption", "Drei Fragen, immer dieselben. Jede richtige Antwort macht dein Feld auf dem Rad ein Viertel kleiner, jede falsche ein Viertel größer. Gilt den ganzen Abend. Wer heute fehlt, tippt mit dem Link von zu Hause."));
   const ko = g.match && g.match.kickoff;
   if (ko) {
     els.tippBody.append(h("p", "caption", `Die Tipps schließen automatisch um ${fmtTime(ko + TP.LOCK_GRACE)}.`));
@@ -2208,7 +2235,7 @@ function submitTip(g, p) {
   g.tips[p.id] = { first: d.first, early: d.early, half: d.half, at: Date.now(), name: p.name, color: p.color };
   ui.tipFor = null;
   ui.tipDraft = null;
-  ui.tipDone = p.name;
+  ui.tipDone = { id: p.id, name: p.name };
   persist();
   renderTipp();
   renderTipBar();
@@ -2258,6 +2285,7 @@ function renderTipLive(g) {
       }
       box.append(row);
       if (later) box.append(h("p", "tres-note", MANUAL_LATER[q.id]));
+      else if (q.id === "half" && g.match && g.match.id) box.append(h("p", "tres-note", "Live-Daten erst eine Stunde nach Anpfiff (wegen Nachspielzeit). Schneller: Pausenstand hier antippen."));
     }
     list.append(box);
   });
@@ -2532,6 +2560,7 @@ function hookRemote(cid, shared, info) {
     root.competitions.push(c);
     root.competitions.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
     saveLocal();
+    SYNC.applied(cid, info.seq);
     if (!els.compSheet.hidden) renderCompList();
     return;
   }
@@ -2563,6 +2592,7 @@ async function drainRemote() {
   } finally {
     ui.remoteBusy = false;
     saveLocal();
+    SYNC.applied(item.c.id, item.info.seq);   // erst jetzt darf dieses Handy wieder hochladen
   }
   drainRemote();
 }
@@ -2701,6 +2731,8 @@ function hookStatus(st) {
   ui.sync = st;
   renderSyncDot();
   if (ui.tab === "squad" && !ui.armed) renderGroup();
+  renderTipBar();
+  if (!els.tippSheet.hidden && !ui.tipFor && !ui.armed) renderTipp();
 }
 function hookReady() {
   if (!root._placeholder) return;
@@ -2797,6 +2829,7 @@ function openGroupSheet(kind, code) {
   const acts = els.groupSheetActions;
   acts.replaceChildren();
   els.groupLink.hidden = true;
+  els.connectForm.hidden = true;
   if (kind === "invite") {
     els.groupTitle.textContent = "Läuft gemeinsam";
     els.groupText.textContent = "Dein Stand ist hochgeladen. Schick jetzt den Link an die anderen: Wer ihn öffnet, sieht live mit und kann mitdrehen. Tipp: Danach die App neu zum Home-Bildschirm hinzufügen.";
@@ -2811,24 +2844,55 @@ function openGroupSheet(kind, code) {
   els.groupSheet.hidden = false;
   els.sheetBackdrop.hidden = false;
 }
+// Verbinden per eingefügtem Link. Typisch: App vom Home-Bildschirm (iPhone) mit eigenem, leerem Speicher.
+const CONNECT_KEY = "fca-bier-roulette:connect-asked";
+const isStandalone = () => (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+function askedConnect() { try { return localStorage.getItem(CONNECT_KEY) === "1"; } catch (e) { return false; } }
+function openConnect(first) {
+  if (busyNow()) return;
+  const acts = els.groupSheetActions;
+  acts.replaceChildren();
+  els.groupLink.hidden = true;
+  els.connectForm.hidden = false;
+  els.connectInput.value = "";
+  els.groupTitle.textContent = "Mit eurer Runde verbinden";
+  els.groupText.textContent = (first ? "Die App auf dem Home-Bildschirm hat einen eigenen Speicher und weiß noch nicht, zu welcher Runde du gehörst. " : "")
+    + "Kopiere den Einladungslink aus der WhatsApp-Gruppe und füge ihn hier ein. Dann siehst du denselben Stand wie alle anderen, und deine Tipps kommen bei allen an.";
+  acts.append(
+    btn("sheet-undo", first ? "Nur hier spielen" : "Abbrechen", () => {
+      if (first) { try { localStorage.setItem(CONNECT_KEY, "1"); } catch (e) { /* egal */ } }
+      closeGroupSheet();
+    }),
+    btn("sheet-next", "Verbinden", submitConnect)
+  );
+  els.groupSheet.hidden = false;
+  els.sheetBackdrop.hidden = false;
+}
+function submitConnect() {
+  const c = SYNC.codeFromText(els.connectInput.value);
+  if (!c) { toast("Das ist kein gültiger Einladungslink."); els.connectInput.focus(); return; }
+  doJoin(c);
+}
 function closeGroupSheet() {
   els.groupSheet.hidden = true;
+  els.connectForm.hidden = true;
   syncBackdrop();
   renderAll(false);
 }
 async function doJoin(code) {
   if (navigator.onLine === false) { toast("Zum Beitreten braucht das Handy kurz Internet."); return; }
   const b = els.groupSheetActions.querySelector(".sheet-next");
+  const label = b ? b.textContent : "Mitspielen";
   if (b) { b.disabled = true; b.textContent = "Prüfe …"; }
   try {
     if (!(await SYNC.groupExists(code))) {
       toast("Diese gemeinsame Runde gibt es nicht. Ist der Link vollständig?");
-      if (b) { b.disabled = false; b.textContent = "Mitspielen"; }
+      if (b) { b.disabled = false; b.textContent = label; }
       return;
     }
   } catch (e) {
     toast("Gerade keine Verbindung. Bitte gleich nochmal.");
-    if (b) { b.disabled = false; b.textContent = "Mitspielen"; }
+    if (b) { b.disabled = false; b.textContent = label; }
     return;
   }
   SYNC.saveGroup(code);
@@ -2908,6 +2972,7 @@ els.joinForm.addEventListener("submit", (e) => {
   openGroupSheet("join", c);
 });
 els.loadingBtn.addEventListener("click", leaveGroup);
+els.connectForm.addEventListener("submit", (e) => { e.preventDefault(); submitConnect(); });
 els.rangeToday.addEventListener("click", () => { ui.range = "today"; renderStats(); });
 els.rangeSeason.addEventListener("click", () => { ui.range = "season"; renderStats(); });
 els.rangeAll.addEventListener("click", () => { ui.range = "all"; renderStats(); });
@@ -2992,6 +3057,11 @@ if (GROUP) {
   if (invite) openGroupSheet("invite");
 }
 if (joinOffer) openGroupSheet("join", joinOffer);
+else if (GROUP && SYNC.codeFromUrl() !== GROUP) {
+  // Einladungslink in der Adresse behalten: Wer jetzt „Zum Home-Bildschirm“ wählt, nimmt die Runde mit
+  try { history.replaceState(null, "", SYNC.inviteUrl(GROUP)); } catch (e) { /* egal */ }
+}
+if (!GROUP && !joinOffer && isStandalone() && localIsFresh() && !askedConnect()) openConnect(true);
 if (document.fonts && document.fonts.ready) {
   document.fonts.ready.then(() => {
     ui.wheelSig = "";

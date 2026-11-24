@@ -25,8 +25,10 @@ Wer holt das nächste Bier? Das Glücksrad für unsere FCA-Runde im Stadion.
 ## Tippspiel
 
 - Bei FCA-Spieltagen steht unter den Namen die Leiste „Tippspiel“. Vor dem Anpfiff tippt jeder verdeckt drei Fragen: Wer trifft zuerst? Fällt ein Tor bis zur 30. Minute? Führt der FCA zur Halbzeit? Dann Handy weitergeben.
+- Wer heute nicht im Stadion ist, tippt mit dem Link von zu Hause mit.
+- Steht an einem Tipp „nicht gesendet“, hatte das Handy kein Netz. App offen lassen, er geht automatisch raus.
 - Jede richtige Antwort macht dein Feld auf dem Rad ein Viertel kleiner, jede falsche ein Viertel größer. Kleineres Feld heißt: seltener Bier holen. Gilt den ganzen Abend.
-- Die App holt die Ergebnisse selbst aus dem Live-Ticker, mit ein paar Minuten Verzögerung. Schneller geht es, wenn einer im Stadion das Ergebnis im Tippspiel antippt.
+- Die App holt die Ergebnisse selbst aus dem Live-Ticker, mit ein paar Minuten Verzögerung (die Halbzeit-Frage erst eine Stunde nach Anpfiff, wegen Nachspielzeit). Schneller geht es, wenn einer im Stadion das Ergebnis im Tippspiel antippt.
 - Bei jeder Auflösung zeigt die App, wer richtig lag. An den Namen stehen drei Punkte: grün richtig, rot daneben, leer noch offen.
 
 ## Gäste und Kader
@@ -39,7 +41,7 @@ Wer holt das nächste Bier? Das Glücksrad für unsere FCA-Runde im Stadion.
 
 - Einmal von dem Handy mit dem bisherigen Stand: Kader → „Gemeinsam spielen“ → „Gemeinsam starten“. Der Stand wird hochgeladen, danach „Link teilen“ in die Gruppe schicken.
 - Wer den Link öffnet, sieht denselben Stand und kann mitdrehen. Dreht einer, dreht das Rad bei allen mit.
-- Am iPhone mit der App auf dem Home-Bildschirm: Startet sie ohne gemeinsame Runde, den Link in der App unter Kader → „Gemeinsam spielen“ einfügen.
+- Am iPhone mit der App auf dem Home-Bildschirm: Startet sie ohne gemeinsame Runde, fragt sie nach dem Einladungslink. Einfach aus WhatsApp kopieren und einfügen. Wer die App neu hinzufügt, sollte vorher den Einladungslink öffnen, dann ist die Runde gleich dabei.
 - Der Punkt oben neben dem Namen zeigt die Verbindung: grün aktuell, gelb wird hochgeladen, rot offline. Ohne Netz wird weitergespielt und später nachgetragen.
 - „Verlassen“ holt den eigenen Stand dieses Handys zurück.
 

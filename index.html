@@ -29,6 +29,7 @@
   <symbol id="i-ball" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M12 7.6l4.2 3-1.6 4.9H9.4l-1.6-4.9z" fill="currentColor"/><path d="M12 7.6V3M16.2 10.6l4.3-1.4M14.6 15.5l2.7 3.7M9.4 15.5l-2.7 3.7M7.8 10.6 3.5 9.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.6 4.6L19.2 7.4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-cross" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></symbol>
+  <symbol id="i-wait" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M12 7.4V12l3.2 2.2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-team" viewBox="0 0 24 24"><circle cx="8.5" cy="8" r="3.4" fill="currentColor"/><path d="M2 20c0-3.6 2.9-6.2 6.5-6.2S15 16.4 15 20z" fill="currentColor"/><circle cx="17" cy="9" r="2.8" fill="currentColor" opacity=".7"/><path d="M15.6 14.2c3.5-.6 6.4 1.8 6.4 5.8h-5.3" fill="currentColor" opacity=".7"/></symbol>
 </svg>
 
@@ -289,6 +290,10 @@
   <h2 class="presence-title" id="groupTitle"></h2>
   <p class="group-text" id="groupText"></p>
   <p class="group-link" id="groupLink" hidden></p>
+  <form class="group-connect" id="connectForm" autocomplete="off" hidden>
+    <label class="sr" for="connectInput">Einladungslink</label>
+    <input id="connectInput" type="text" inputmode="url" placeholder="Einladungslink einfügen" enterkeyhint="go" autocapitalize="off" spellcheck="false">
+  </form>
   <div class="sheet-actions" id="groupSheetActions"></div>
 </section>
 <div class="loading" id="loading" hidden role="status">

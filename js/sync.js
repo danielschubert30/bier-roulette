@@ -128,6 +128,7 @@ function mergeAt(path, b, l, r, st) {
   if (eq(l, b)) return r;
   if (eq(r, b)) return l;
   if (eq(l, r)) return r;
+  if (path === "tipp") return mergeTipp(b, l, r, st);
   if (!ATOMIC.has(path) && isObj(l) && isObj(r)) {
     const bo = isObj(b) ? b : {};
     const out = {};
@@ -145,6 +146,47 @@ function mergeAt(path, b, l, r, st) {
   }
   if (BYID.has(path) && Array.isArray(l) && Array.isArray(r)) return mergeById(path, Array.isArray(b) ? b : [], l, r, st);
   return r;   // gleichzeitig geändert, unkritisch: der fremde Stand gilt
+}
+// Tippspiel: Abgegebene Tipps gehen beim Zusammenführen nie verloren.
+// Verschiedene Abende: Der neuere gilt. Gleicher Abend: Tipps je Spieler und Ergebnisse je Frage einzeln;
+// gleichzeitig geändert gewinnt der spätere Tipp bzw. das von Hand eingetragene Ergebnis.
+const later = (x, y) => (((x && x.at) || 0) > ((y && y.at) || 0) ? x : y);
+const TIPP_EACH = {
+  tips: later,
+  results: (x, y) => ((x.src === "manual") !== (y.src === "manual") ? (x.src === "manual" ? x : y) : later(x, y))
+};
+function mergeTipp(b, l, r, st) {
+  if (!isObj(l) || !isObj(r)) return r;
+  if (l.day !== r.day) return String(l.day) > String(r.day) ? l : r;
+  const bo = isObj(b) && b.day === l.day ? b : {};   // Ausgangsstand von einem anderen Abend zählt nicht
+  const out = {};
+  const keys = [...Object.keys(r), ...Object.keys(l).filter((k) => !(k in r))];
+  for (const k of keys) {
+    const v = TIPP_EACH[k] ? mergeEach(bo[k], l[k], r[k], TIPP_EACH[k]) : mergeAt("tipp." + k, bo[k], l[k], r[k], st);
+    if (v !== undefined) out[k] = v;
+  }
+  return out;
+}
+function mergeEach(b, l, r, win) {
+  const bo = isObj(b) ? b : {}, lo = isObj(l) ? l : {}, ro = isObj(r) ? r : {};
+  const out = {};
+  for (const k of new Set([...Object.keys(ro), ...Object.keys(lo)])) {
+    const bv = bo[k], lv = lo[k], rv = ro[k];
+    let v;
+    if (eq(lv, bv)) v = rv;
+    else if (eq(rv, bv)) v = lv;
+    else if (lv === undefined || rv === undefined) v = lv === undefined ? rv : lv;   // hier gelöscht, dort geändert: bleibt
+    else v = win(lv, rv);
+    if (v !== undefined) out[k] = v;
+  }
+  return out;
+}
+// Zusammenstoß (z. B. zwei Drehs gleichzeitig): Der fremde Stand gilt, die eigenen Tipps kommen trotzdem mit
+export function keepTips(base, local, remote) {
+  if (!isObj(remote) || !isObj(local)) return { value: remote, kept: false };
+  const t = mergeAt("tipp", isObj(base) ? base.tipp : null, local.tipp, remote.tipp, { conflict: false, paths: [] });
+  if (eq(t, remote.tipp)) return { value: remote, kept: false };
+  return { value: { ...remote, tipp: t }, kept: true };
 }
 function mergeById(path, b, l, r, st) {
   const key = (x) => (x && typeof x === "object" ? x.id : undefined);
@@ -171,7 +213,9 @@ let meta = {};          // pro Meisterschaft: rev, base (gemeinsamer Ausgangssta
 let online = typeof navigator === "undefined" || navigator.onLine !== false;
 let lastError = null;
 let readyFired = false;
-let retryTimer = 0, metaTimer = 0;
+const RETRY_MIN = 3000, RETRY_MAX = 20000;   // nach einem Funkloch erst schnell, dann seltener nachfragen
+let retryTimer = 0, metaTimer = 0, retryMs = RETRY_MIN;
+let wakeSignIn = null;  // weckt die Anmeldeschleife, sobald wieder Netz da ist
 const E = new Map();
 const myWids = new Set();
 
@@ -183,12 +227,24 @@ function entry(cid) {
     e = {
       rev: m.rev || 0, base: typeof m.base === "string" ? m.base : null,
       rounds: new Set(m.rounds || []), days: new Set(m.days || []),
-      running: null, again: false, quiet: true, silent: false, stash: null, timer: 0, roundsUnsub: null
+      running: null, again: false, quiet: true, silent: false, stash: null, timer: 0, roundsUnsub: null,
+      seq: 0, pendingS: null, pendingAt: 0, baseP: null, baseO: null
     };
     E.set(cid, e);
   }
   return e;
 }
+// Übergabe eines Stands an die App. Die App übernimmt ihn eventuell erst nach einer laufenden Animation.
+// Bis dahin gilt dieser Stand als der eigene, und es wird nichts hochgeladen: Sonst würde der veraltete Stand
+// im Speicher die Änderungen der anderen Handys überschreiben.
+function deliver(cid, value, info) {
+  const e = entry(cid);
+  e.seq++;
+  e.pendingS = stable(value);
+  e.pendingAt = Date.now();
+  hooks.onRemote(cid, value, { ...info, seq: e.seq });
+}
+const localOf = (e, comp) => (e.pendingS != null ? e.pendingS : sj(comp));
 function loadMeta(c) {
   try { return JSON.parse(lsGet(META_KEY + c) || "{}") || {}; } catch (e) { return {}; }
 }
@@ -231,7 +287,7 @@ export function status() {
     for (const c of root.competitions) {
       const e = E.get(c.id);
       if (!e) continue;
-      if (sj(c) !== e.base || c.rounds.some((r) => !e.rounds.has(r.id))) { pending = true; break; }
+      if (localOf(e, c) !== e.base || c.rounds.some((r) => !e.rounds.has(r.id))) { pending = true; break; }
     }
   }
   const denied = lastError && /permission/i.test(String(lastError.code || lastError.message || ""));
@@ -247,8 +303,12 @@ export async function start(groupCode, appRoot, appHooks) {
   hooks = appHooks;
   meta = loadMeta(code);
   started = true;
-  window.addEventListener("online", () => { online = true; flushAll(); report(); });
+  window.addEventListener("online", () => { online = true; wakeUp(); });
   window.addEventListener("offline", () => { online = false; report(); });
+  // Zurück in der App oder wieder Netz: sofort nachsenden, nicht erst beim nächsten Versuch
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") wakeUp(); });
+  window.addEventListener("pageshow", wakeUp);
+  window.addEventListener("focus", wakeUp);
   report();
   for (let attempt = 1; ; attempt++) {
     try {
@@ -259,7 +319,8 @@ export async function start(groupCode, appRoot, appHooks) {
       lastError = e;
       online = false;
       report();
-      await sleep(Math.min(30000, 3000 * attempt));
+      await new Promise((res) => { wakeSignIn = res; setTimeout(res, Math.min(30000, 3000 * attempt)); });
+      wakeSignIn = null;
     }
   }
   online = true;
@@ -268,6 +329,13 @@ export async function start(groupCode, appRoot, appHooks) {
   report();
 }
 
+function wakeUp() {
+  if (!started) return;
+  if (wakeSignIn) { wakeSignIn(); return; }
+  retryMs = RETRY_MIN;
+  flushAll();
+  report();
+}
 function onErr(err) {
   lastError = err;
   report();
@@ -327,19 +395,23 @@ function takeRemote(cid, d) {
   const remoteS = stable(remote);
   const comp = findComp(cid);
   const baseS = e.base;
+  const localS = comp ? localOf(e, comp) : null;
   e.rev = d.rev;
   e.base = remoteS;
-  if (!comp || baseS == null || sj(comp) === baseS) {
-    hooks.onRemote(cid, remote, {});
+  if (!comp || baseS == null || localS === baseS) {
+    deliver(cid, remote, {});
     return;
   }
-  const m = merge3(JSON.parse(baseS), JSON.parse(sj(comp)), remote);
+  const base = JSON.parse(baseS), local = JSON.parse(localS);
+  const m = merge3(base, local, remote);
   if (m.conflict) {
     dropUnsentRounds(cid, e);
-    hooks.onRemote(cid, remote, { dropped: true, base: JSON.parse(baseS), quiet: e.quiet });
+    const k = keepTips(base, local, remote);
+    deliver(cid, k.value, { dropped: true, base, quiet: e.quiet });
     e.quiet = true;
+    if (k.kept) schedule(cid);
   } else {
-    hooks.onRemote(cid, m.value, { merged: true });
+    deliver(cid, m.value, { merged: true });
     schedule(cid);
   }
 }
@@ -383,14 +455,20 @@ function flushAll() {
 }
 function retryLater() {
   clearTimeout(retryTimer);
-  retryTimer = setTimeout(flushAll, 15000);
+  retryTimer = setTimeout(flushAll, retryMs);
+  retryMs = Math.min(RETRY_MAX, retryMs * 2);
 }
 function flush(cid) {
   const e = entry(cid);
   if (!fb || !signedIn) return Promise.resolve("offline");
   if (e.running) { e.again = true; return e.running; }
   e.running = doFlush(cid)
-    .then((res) => { if (res === "offline") retryLater(); return res; })
+    .then((res) => {
+      if (res === "offline") retryLater();
+      else if (res === "wait") schedule(cid, 400);
+      else retryMs = RETRY_MIN;
+      return res;
+    })
     .finally(() => {
       e.running = null;
       if (e.stash) {
@@ -408,6 +486,11 @@ async function doFlush(cid) {
   const e = entry(cid);
   const comp = findComp(cid);
   if (!comp || comp._ph) return "clean";
+  // Ein fremder Stand ist unterwegs zur App (sie spielt gerade etwas ab): erst danach hochladen
+  if (e.pendingS != null) {
+    if (Date.now() - e.pendingAt < 20000) return "wait";
+    e.pendingS = null;
+  }
   const localS = sj(comp);
   const newRounds = comp.rounds.filter((r) => !e.rounds.has(r.id));
   const newDays = (comp.tippArchive || []).filter((g) => !e.days.has(g.day));
@@ -448,7 +531,7 @@ async function doFlush(cid) {
       // Was in der Zwischenzeit hier noch dazukam, bleibt erhalten
       const now = findComp(cid);
       const value = now ? merge3(JSON.parse(localS), JSON.parse(sj(now)), res.merged).value : res.merged;
-      hooks.onRemote(cid, value, { merged: true });
+      deliver(cid, value, { merged: true });
     }
     online = true;
     lastError = null;
@@ -459,7 +542,10 @@ async function doFlush(cid) {
       e.rev = err.d.rev || 0;
       e.base = stable(err.remote);
       dropUnsentRounds(cid, e);
-      hooks.onRemote(cid, err.remote, { dropped: true, base: baseS ? JSON.parse(baseS) : null, quiet });
+      const base = baseS ? JSON.parse(baseS) : null;
+      const k = keepTips(base, JSON.parse(localS), err.remote);
+      deliver(cid, k.value, { dropped: true, base, quiet });
+      if (k.kept) e.again = true;   // gerettete Tipps gleich hochladen
       saveMeta();
       return "conflict";
     }
@@ -474,6 +560,29 @@ async function doFlush(cid) {
 
 /* ---------- Für die App ---------- */
 export const isActive = () => started;
+
+// Die App hat den mit onRemote übergebenen Stand übernommen (Nummer aus info.seq)
+export function applied(cid, seq) {
+  const e = E.get(cid);
+  if (e && seq >= e.seq) e.pendingS = null;
+}
+
+// Ist der Tipp dieses Spielers schon beim Server angekommen? null = kein Tipp oder keine Gruppe
+export function tipSent(cid, pid) {
+  if (!started) return null;
+  const comp = findComp(cid);
+  const t = comp && comp.tipp && comp.tipp.tips && comp.tipp.tips[pid];
+  if (!t) return null;
+  const e = E.get(cid);
+  if (!e || !e.base) return false;
+  if (e.baseP !== e.base) {
+    e.baseP = e.base;
+    try { e.baseO = JSON.parse(e.base); } catch (x) { e.baseO = null; }
+  }
+  const bt = e.baseO && e.baseO.tipp;
+  const s = bt && bt.day === comp.tipp.day && bt.tips && bt.tips[pid];
+  return !!s && ["first", "early", "half", "at"].every((k) => s[k] === t[k]);
+}
 
 // Nach jeder Änderung aufrufen. quiet: automatische Änderung, bei Verwerfen keine Meldung
 export function changed(cid, quiet) {
@@ -493,8 +602,12 @@ export async function commitNow(cid, ms = 6000) {
   e.silent = true;
   e.quiet = false;
   const work = (async () => {
-    if (e.running) await e.running.catch(() => {});
-    return flush(cid);
+    for (;;) {
+      if (e.running) await e.running.catch(() => {});
+      const r = await flush(cid);
+      if (r !== "wait") return r;
+      await sleep(250);
+    }
   })();
   const r = await Promise.race([work, sleep(ms).then(() => "slow")]);
   if (r === "slow") return "offline";
