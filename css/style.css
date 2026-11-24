@@ -441,6 +441,10 @@ button { touch-action: manipulation; }
 .s-head span:nth-child(n+2) { text-align: right; }
 .s-row { padding: 10px 0; border-bottom: 1px solid var(--line); }
 .s-row:last-child { border-bottom: 0; }
+/* Tippkönig: gleiche Optik wie der Bier-Saldo, breitere Zahlenspalten */
+.s-head.k, .s-row.k { grid-template-columns: minmax(0, 1fr) 54px 44px 52px; gap: 6px; }
+.s-head.k { letter-spacing: 0.06em; }
+.s-row.k .who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
 .num.plus { color: var(--good); font-weight: 700; }
 .num.minus { color: var(--bad); font-weight: 700; }
 .transfers { list-style: none; margin: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; border-radius: var(--radius); border: 1px solid var(--gold); background: var(--gold-soft); }
@@ -595,6 +599,7 @@ button { touch-action: manipulation; }
 .tt-right { color: var(--night); background: var(--good); }
 .tt-wrong { color: var(--bad-ink); background: var(--bad); }
 .tt-void { color: var(--chalk-3); text-decoration: line-through; }
+.tt-none { color: var(--chalk-4); }
 .tt-w { font-weight: 700; white-space: nowrap; }
 .tipp-ok.is-wait { background: transparent; border-style: dashed; font-weight: 500; line-height: 1.35; }
 .tipp-ok.is-wait .ico { color: var(--gold); }
@@ -620,6 +625,11 @@ button { touch-action: manipulation; }
 .rv-list li { display: grid; grid-template-columns: 18px 12px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 36px; }
 .rv-ico { width: 18px; height: 18px; color: var(--accent); }
 .rv-name { font-family: var(--font-display); font-weight: 900; font-size: 21px; text-transform: uppercase; line-height: 1.05; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-name .player-meta { white-space: normal; margin-top: 2px; }
+.rv-pairs li { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; min-height: 44px; }
+.rv-who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rv-who .dot { flex: none; }
+.rv-arrow { font-family: var(--font-label); font-weight: 700; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); }
 .rv-w { font-family: var(--font-display); font-weight: 900; font-size: 20px; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rv-void { margin: 0; padding: 12px; border-radius: 14px; background: var(--surface-2); color: var(--chalk-2); }
 .sheet-reveal:not([hidden]) .rv-list li { animation: rise 0.35s ease both; }

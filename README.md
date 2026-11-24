@@ -27,7 +27,10 @@ Wer holt das nächste Bier? Das Glücksrad für unsere FCA-Runde im Stadion.
 - Bei FCA-Spieltagen steht unter den Namen die Leiste „Tippspiel“. Vor dem Anpfiff tippt jeder verdeckt drei Fragen: Wer trifft zuerst? Fällt ein Tor bis zur 30. Minute? Führt der FCA zur Halbzeit? Dann Handy weitergeben.
 - Wer heute nicht im Stadion ist, tippt mit dem Link von zu Hause mit.
 - Steht an einem Tipp „nicht gesendet“, hatte das Handy kein Netz. App offen lassen, er geht automatisch raus.
-- Jede richtige Antwort macht dein Feld auf dem Rad ein Viertel kleiner, jede falsche ein Viertel größer. Kleineres Feld heißt: seltener Bier holen. Gilt den ganzen Abend.
+- Jede richtige Antwort macht dein Feld auf dem Rad 20 % kleiner, jede falsche 20 % größer. Kleineres Feld heißt: seltener Bier holen. Gilt den ganzen Abend.
+- Wer in der Runde schon raus ist, bekommt beim Anpfiff einen Paten zugelost, der noch im Rad ist. Jede richtige Antwort macht das Feld des Paten 20 % kleiner.
+- Unter Statistik steht der Tippkönig: richtige Antworten und Trefferquote für heute, die Saison oder insgesamt.
+- Klappt bei Heim- und Auswärtsspielen. Pokalspiele löst die App selbst auf, wenn der Live-Ticker sie führt, sonst per Knopf.
 - Die App holt die Ergebnisse selbst aus dem Live-Ticker, mit ein paar Minuten Verzögerung (die Halbzeit-Frage erst eine Stunde nach Anpfiff, wegen Nachspielzeit). Schneller geht es, wenn einer im Stadion das Ergebnis im Tippspiel antippt.
 - Bei jeder Auflösung zeigt die App, wer richtig lag. An den Namen stehen drei Punkte: grün richtig, rot daneben, leer noch offen.
 

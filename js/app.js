@@ -6,7 +6,7 @@ import * as TP from "./tipp.js";
 import * as SO from "./shootout.js";
 import { SPIN_QUIPS, RESULT_QUIPS, FINAL_INTROS, CHAMPION_QUIPS, SHOT_TEXT, FCA_FACTS, TEMPO_QUIPS } from "./content.js";
 
-const APP_VERSION = "1.6.0";
+const APP_VERSION = "1.7.0";
 const NS = "http://www.w3.org/2000/svg";
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const $ = (id) => document.getElementById(id);
@@ -26,7 +26,7 @@ const els = {
   presenceCancel: $("presenceCancel"), presenceOk: $("presenceOk"), guestForm: $("guestForm"), guestInput: $("guestInput"),
   guestRoster: $("guestRoster"), roleReg: $("roleReg"), roleGuest: $("roleGuest"),
   champCard: $("champCard"), rangeToday: $("rangeToday"), rangeSeason: $("rangeSeason"), rangeAll: $("rangeAll"),
-  kpis: $("kpis"), table: $("table"), seasonSeg: $("seasonSeg"), seasonMeta: $("seasonMeta"), saldo: $("saldo"), debts: $("debts"), honors: $("honors"),
+  kpis: $("kpis"), table: $("table"), tippKingBox: $("tippKingBox"), tippKing: $("tippKing"), seasonSeg: $("seasonSeg"), seasonMeta: $("seasonMeta"), saldo: $("saldo"), debts: $("debts"), honors: $("honors"),
   squadNote: $("squadNote"), roster: $("roster"), addForm: $("addForm"), nameInput: $("nameInput"), addBtn: $("addBtn"),
   roundTools: $("roundTools"), abortBtn: $("abortBtn"), soundToggle: $("soundToggle"), vibeToggle: $("vibeToggle"),
   resetBtn: $("resetBtn"), version: $("version"), toast: $("toast"),
@@ -1132,6 +1132,7 @@ function renderChampion() {
 
 function renderGame(animate) {
   ensureTipGame();
+  ensurePatrons();
   syncRoundMembers();
   let mode = viewMode();
   if (mode === "spin" && finalDue(state.round) && !ui.sheetFor && !ui.spinning && !ui.remoteBusy) {
@@ -1365,9 +1366,65 @@ function renderStats() {
   }
 
   renderTempo();
+  renderTippKing();
   renderSaldo();
   renderDebtList();
   renderHonors();
+}
+/* Tippkönig: richtige Antworten im Tippspiel je Spieler (Zeitraum wie oben: Heute, Saison, Gesamt) */
+function tipGames(c = state) {
+  const byDay = new Map();
+  for (const g of c.tippArchive || []) if (g && g.day) byDay.set(g.day, g);
+  if (c.tipp && c.tipp.day) byDay.set(c.tipp.day, c.tipp);
+  return [...byDay.values()];
+}
+const dayTs = (d) => { const [y, m, dd] = d.split("-").map(Number); return new Date(y, m - 1, dd, 12).getTime(); };
+function computeTippKing() {
+  const today = todayKey(), s0 = seasonStartOf();
+  const games = tipGames().filter((g) => (ui.range === "today" ? g.day === today : ui.range === "season" ? seasonStartOf(dayTs(g.day)) === s0 : true));
+  const rows = new Map();
+  for (const g of games) {
+    for (const pid of Object.keys(g.tips)) {
+      const sc = TP.scoreOf(g, pid);
+      const p = state.players.find((x) => x.id === pid);
+      const t = g.tips[pid];
+      const r = rows.get(pid) || { id: pid, name: p ? p.name : t.name, color: p ? p.color : t.color, guest: p ? p.guest : false, games: 0, right: 0, wrong: 0 };
+      r.games++;
+      r.right += sc.right;
+      r.wrong += sc.wrong;
+      rows.set(pid, r);
+    }
+  }
+  const quote = (r) => (r.right + r.wrong ? r.right / (r.right + r.wrong) : -1);
+  return { games: games.length, rows: [...rows.values()].sort((a, b) => b.right - a.right || quote(b) - quote(a) || a.name.localeCompare(b.name, "de")) };
+}
+function renderTippKing() {
+  const any = state.fca || tipGames().some((g) => Object.keys(g.tips).length);
+  els.tippKingBox.hidden = !any;
+  if (!any) return;
+  els.tippKing.replaceChildren();
+  const { games, rows } = computeTippKing();
+  const decided = rows.reduce((n, r) => n + r.right + r.wrong, 0);
+  if (!rows.length || !decided) {
+    els.tippKing.append(h("p", "empty", rows.length ? "Noch keine Frage entschieden." : ui.range === "today" ? "Heute wurde noch nicht getippt." : "In diesem Zeitraum wurde noch nicht getippt."));
+    return;
+  }
+  const top = rows[0];
+  const tied = rows.filter((r) => r.right === top.right).length;
+  els.tippKing.append(h("p", "caption", (tied > 1 ? `${tied} gleichauf mit je ${top.right} richtigen Antworten` : `Tippkönig: ${top.name} mit ${top.right} richtigen Antworten`)
+    + ` · ${games} ${games === 1 ? "Spiel" : "Spiele"}`));
+  const t = h("div", "table");
+  const head = h("div", "s-head k");
+  ["Spieler", "Richtig", "Spiele", "Quote"].forEach((x) => head.append(h("span", null, x)));
+  t.append(head);
+  for (const r of rows) {
+    const row = h("div", "s-row k");
+    const n = r.right + r.wrong;
+    row.append(whoCell(r), h("span", "num" + (r.right === top.right && r.right > 0 ? " is-gold" : ""), String(r.right)), h("span", "num", String(r.games)),
+      h("span", "num", n ? `${Math.round((100 * r.right) / n)}\u00a0%` : "–"));
+    t.append(row);
+  }
+  els.tippKing.append(t);
 }
 function renderSaldo() {
   const starts = new Set([seasonStartOf()]);
@@ -1991,19 +2048,41 @@ const tipCount = (g) => (g ? Object.keys(g.tips).length : 0);
 const tipLocked = (g) => TP.isLocked(g, Date.now());
 const oppOf = (g) => (g && g.match && g.match.opp) || "Gegner";
 const fieldPct = (w) => `${Math.round(w * 100)}\u00a0%`;
+// Früheres Tippspiel ins Archiv (gleicher Abend: zusammenführen statt doppelt)
+function archiveGame(c, g) {
+  const copy = clone(g);
+  copy.seen = {};
+  const i = c.tippArchive.findIndex((x) => x.day === g.day);
+  if (i >= 0) c.tippArchive[i] = SYNC.unionGame(c.tippArchive[i], copy);
+  else c.tippArchive.push(copy);
+  c.tippArchive.sort((a, b) => (a.day < b.day ? -1 : 1));
+  if (c.tippArchive.length > 60) c.tippArchive.splice(0, c.tippArchive.length - 60);
+}
 function ensureTipGame() {
   if (!tippOn()) return null;
   const day = todayKey();
   if (state.tipp && state.tipp.day === day) return state.tipp;
-  if (state.tipp && tipCount(state.tipp)) {
-    state.tippArchive.push(state.tipp);
-    if (state.tippArchive.length > 60) state.tippArchive.splice(0, state.tippArchive.length - 60);
-  }
+  if (state.tipp && tipCount(state.tipp)) archiveGame(state, state.tipp);
   state.tipp = TP.newGame(day);
   ui.reveals = [];
   persist(true);
   return state.tipp;
 }
+// Paten für Ausgeschiedene: sobald die Tipps zu sind (Regeln in js/tipp.js, patronsFor)
+function ensurePatrons() {
+  const g = tipGame();
+  if (!g || !state.round || !tipLocked(g)) return;
+  const next = TP.patronsFor(g, state.round, TP.lockTime(g));
+  if (TP.patronSig({ patron: next }) === TP.patronSig(g)) return;
+  g.patron = next;
+  persist(true);
+}
+function personOf(id) {
+  const p = state.players.find((x) => x.id === id) || (state.round && state.round.pot.find((x) => x.id === id));
+  return p || { id, name: "?", color: PALETTE[0] };
+}
+// In der laufenden Runde schon gezogen (für den Hinweis beim Tippen)
+const outOfRound = (id) => !!state.round && !state.round.final && state.round.picks.some((k) => k.id === id);
 function weightFor(id) {
   const g = tipGame();
   return g ? TP.weightOf(g, id) : 1;
@@ -2168,7 +2247,10 @@ function renderTipList(g) {
     else if (done) st.append(icon("i-check"), document.createTextNode("getippt"));
     else st.textContent = "Tippen";
     const nm = h("span", "player-name", p.name);
-    if (!p.guest && !isPresent(p.id)) nm.append(h("small", "player-meta", "heute nicht da, tippt von zu Hause"));
+    const meta = [];
+    if (!p.guest && !isPresent(p.id)) meta.push("heute nicht da, tippt von zu Hause");
+    if (outOfRound(p.id)) meta.push("schon raus: Tipps helfen einem Paten");
+    if (meta.length) nm.append(h("small", "player-meta", meta.join(" · ")));
     b.append(h("span", "dot"), nm, st);
     b.addEventListener("click", () => {
       ui.tipDone = null;
@@ -2184,7 +2266,7 @@ function renderTipList(g) {
   if (!people.length) ul.append(h("li", "empty", "Im Kader spielt gerade niemand mit."));
   els.tippBody.append(ul);
   els.tippBody.append(btn("link-btn tipp-who", "Fehlt jemand? Anwesenheit ändern", () => { closeTipp(); openPresence(openTipp); }));
-  els.tippBody.append(h("p", "caption", "Drei Fragen, immer dieselben. Jede richtige Antwort macht dein Feld auf dem Rad ein Viertel kleiner, jede falsche ein Viertel größer. Gilt den ganzen Abend. Wer heute fehlt, tippt mit dem Link von zu Hause."));
+  els.tippBody.append(h("p", "caption", "Drei Fragen, immer dieselben. Jede richtige Antwort macht dein Feld auf dem Rad 20\u00a0% kleiner, jede falsche 20\u00a0% größer. Gilt den ganzen Abend. Wer heute fehlt, tippt mit dem Link von zu Hause. Wer in der Runde schon raus ist, bekommt beim Anpfiff einen Paten zugelost: Seine richtigen Antworten machen das Feld des Paten kleiner."));
   const ko = g.match && g.match.kickoff;
   if (ko) {
     els.tippBody.append(h("p", "caption", `Die Tipps schließen automatisch um ${fmtTime(ko + TP.LOCK_GRACE)}.`));
@@ -2209,7 +2291,8 @@ function renderTipForm(g) {
   const d = ui.tipDraft;
   els.tippLabel.textContent = "Tippspiel · verdeckt";
   els.tippTitle.textContent = p.name;
-  els.tippNote.textContent = "Nur du schaust hin. Die Tipps bleiben bis zum Anpfiff verdeckt.";
+  els.tippNote.textContent = "Nur du schaust hin. Die Tipps bleiben bis zum Anpfiff verdeckt."
+    + (outOfRound(p.id) ? " Du bist in dieser Runde schon raus: Deine richtigen Antworten helfen einem Paten, der beim Anpfiff zugelost wird." : "");
   TP.QUESTIONS.forEach((q, i) => {
     const box = h("div", "tq");
     box.append(h("p", "tq-text", `${i + 1}. ${q.text}`));
@@ -2296,14 +2379,24 @@ function renderTipLive(g) {
   const head = h("div", "tt-row tt-head");
   head.append(h("span", null, "Spieler"), ...TP.QUESTIONS.map((q) => h("span", null, q.short)), h("span", null, "Feld"));
   t.append(head);
-  const tippers = Object.keys(g.tips).map((pid) => tipPerson(g, pid))
+  const pat = g.patron || {};
+  const pates = new Set(Object.values(pat));
+  const ids = Object.keys(g.tips).concat([...pates].filter((id) => !g.tips[id]));
+  const tippers = ids.map((pid) => (g.tips[pid] ? tipPerson(g, pid) : personOf(pid)))
     .sort((a, b) => TP.weightOf(g, a.id) - TP.weightOf(g, b.id) || a.name.localeCompare(b.name, "de"));
   for (const p of tippers) {
     const s = TP.scoreOf(g, p.id);
     const tip = g.tips[p.id];
     const row = h("div", "tt-row");
-    row.append(whoCell(p));
+    const who = whoCell(p);
+    const notes = [];
+    if (pat[p.id]) notes.push(`Pate: ${personOf(pat[p.id]).name}`);
+    const kids = Object.keys(pat).filter((t) => pat[t] === p.id).map((t) => tipPerson(g, t).name);
+    if (kids.length) notes.push(`Pate von ${kids.join(", ")}`);
+    if (notes.length) who.lastChild.append(h("small", "player-meta", notes.join(" · ")));
+    row.append(who);
     TP.QUESTIONS.forEach((q, i) => {
+      if (!tip) { row.append(h("span", "tt-cell tt-none", "–")); return; }
       const v = tip[q.id];
       row.append(h("span", "tt-cell tt-" + s.marks[i], v === "opp" ? "Geg." : TP.optLabel(v)));
     });
@@ -2312,9 +2405,10 @@ function renderTipLive(g) {
     t.append(row);
   }
   els.tippBody.append(t);
-  const none = tipPeople(g).filter((p) => !g.tips[p.id]);
+  const none = tipPeople(g).filter((p) => !g.tips[p.id] && !pates.has(p.id));
   if (none.length) els.tippBody.append(h("p", "caption", `Ohne Tipp, Feld bleibt normal: ${none.map((p) => p.name).join(", ")}.`));
-  els.tippBody.append(h("p", "caption", "100 % ist ein normales Feld. Jede richtige Antwort nimmt ein Viertel weg, jede falsche legt ein Viertel drauf. Die Chance, gezogen zu werden, entspricht der Feldgröße."));
+  if (Object.keys(pat).length) els.tippBody.append(h("p", "caption", "Paten: Wer beim Anpfiff schon raus war, hilft mit jeder richtigen Antwort seinem Paten (Feld 20\u00a0% kleiner)."));
+  els.tippBody.append(h("p", "caption", "100 % ist ein normales Feld. Jede richtige Antwort nimmt 20\u00a0% weg, jede falsche legt 20\u00a0% drauf. Die Chance, gezogen zu werden, entspricht der Feldgröße."));
   els.tippActions.className = "sheet-actions sheet-actions-single";
   els.tippActions.append(btn("sheet-next", "Fertig", closeTipp));
 }
@@ -2353,6 +2447,8 @@ function maybeReveal() {
   const g = tipGame();
   if (!g) { ui.reveals = []; return; }
   if (revealBlocked()) return;
+  const sig = TP.patronSig(g);
+  if (sig && g.seen.patron !== sig) { openPatronReveal(g, sig); return; }
   // auch Auflösungen, die noch nie gezeigt wurden (z. B. weil die App zu war)
   for (const q of TP.QUESTIONS) {
     const r = g.results[q.id];
@@ -2377,11 +2473,45 @@ function revealGroup(title, people, cls, iconId, delta) {
   for (const p of people) {
     const li = h("li");
     li.style.setProperty("--c", p.color);
-    li.append(icon(iconId, "rv-ico"), h("span", "dot"), h("span", "rv-name", p.name), h("span", "rv-w", delta));
+    const nm = h("span", "rv-name", p.name);
+    if (p.note) nm.append(h("small", "player-meta", p.note));
+    li.append(icon(iconId, "rv-ico"), h("span", "dot"), nm, h("span", "rv-w", delta));
     ul.append(li);
   }
   box.append(ul);
   return box;
+}
+function openPatronReveal(g, sig) {
+  g.seen.patron = sig;
+  persist();
+  ui.revealing = { qid: "patron" };
+  const pairs = Object.keys(g.patron).map((t) => [tipPerson(g, t), personOf(g.patron[t])]);
+  els.revealLabel.textContent = "Tippspiel · Anpfiff";
+  els.revealTitle.textContent = pairs.length === 1 ? "Pate zugelost" : "Paten zugelost";
+  els.revealSrc.textContent = `Für ${pairs.length === 1 ? "einen, der" : pairs.length + ", die"} in dieser Runde schon raus ${pairs.length === 1 ? "ist" : "sind"}`;
+  const body = els.revealBody;
+  body.replaceChildren();
+  const ul = h("ul", "rv-list rv-pairs");
+  for (const [a, b] of pairs) {
+    const li = h("li");
+    const x = h("span", "rv-who"), y = h("span", "rv-who");
+    x.style.setProperty("--c", a.color);
+    y.style.setProperty("--c", b.color);
+    x.append(h("span", "dot"), h("span", "rv-name", a.name));
+    y.append(h("span", "dot"), h("span", "rv-name", b.name));
+    li.append(x, h("span", "rv-arrow", "hilft"), y);
+    ul.append(li);
+  }
+  body.append(ul, h("p", "caption", "Jede richtige Antwort eines Ausgeschiedenen macht das Feld seines Paten 20\u00a0% kleiner. Falsche Antworten zählen für den Paten nicht."));
+  const acts = els.revealActions;
+  acts.replaceChildren();
+  acts.className = "sheet-actions sheet-actions-single";
+  const more = TP.QUESTIONS.some((q) => g.results[q.id] && g.seen[q.id] !== g.results[q.id].v);
+  acts.append(btn("sheet-next", more ? "Nächste" : ui.tab === "game" && els.tippSheet.hidden ? "Zum Rad" : "Weiter", closeReveal));
+  els.revealSheet.hidden = false;
+  els.sheetBackdrop.hidden = false;
+  els.revealSheet.scrollTop = 0;
+  sting();
 }
 function openReveal(g, qid) {
   const r = g.results[qid];
@@ -2399,7 +2529,9 @@ function openReveal(g, qid) {
   if (r.v === "void") {
     body.append(h("p", "rv-void", "Diese Frage zählt nicht. Kein Feld ändert sich."));
   } else {
-    const right = tippers.filter((p) => g.tips[p.id][qid] === r.v);
+    const pct = `${Math.round(TP.STEP * 100)}\u00a0%`;
+    const right = tippers.filter((p) => g.tips[p.id][qid] === r.v)
+      .map((p) => (g.patron && g.patron[p.id] ? { ...p, note: `Pate ${personOf(g.patron[p.id]).name}: auch \u2212${pct}` } : p));
     const wrong = tippers.filter((p) => g.tips[p.id][qid] !== r.v);
     body.append(
       revealGroup("Richtig · Feld wird kleiner", right, "is-right", "i-check", `\u2212${Math.round(TP.STEP * 100)}\u00a0%`),
@@ -2472,7 +2604,11 @@ async function pollLive(force) {
     if (needSearch) {
       let found = null;
       for (const lg of TP.LEAGUES) {
-        found = TP.pickMatch(await getJson(`/getmatchdata/${lg}`), dayStart(), dayStart() + 864e5);
+        try {
+          found = TP.pickMatch(await getJson(`/getmatchdata/${lg}`), dayStart(), dayStart() + 864e5);
+        } catch (e) {
+          if (lg === TP.LEAGUES[0]) throw e;   // nur die 1. Liga zählt als „nicht erreichbar“; Pokal fehlt dort manchmal ganz
+        }
         if (found) break;
       }
       g.match = found ? TP.matchMeta(found, Date.now())
@@ -2519,6 +2655,7 @@ setInterval(() => {
 /* ---------- Gemeinsam spielen: Änderungen anderer Handys ---------- */
 function assignShared(c, shared) {
   const seen = c.tipp && shared.tipp && c.tipp.day === shared.tipp.day ? c.tipp.seen || {} : {};
+  if (c.tipp && shared.tipp && c.tipp.day < shared.tipp.day && Object.keys(c.tipp.tips).length) archiveGame(c, c.tipp);
   for (const k of SYNC.SHARED) c[k] = shared[k] == null ? null : clone(shared[k]);
   if (!Array.isArray(c.players)) c.players = [];
   if (!Array.isArray(c.pending)) c.pending = [];
@@ -2721,6 +2858,14 @@ function hookRounds(cid, rounds) {
   if (ui.spinning || ui.shooting || ui.remoteBusy) { ui.roundsDirty = true; return; }
   renderChrome();
   if (ui.tab === "stats") renderStats();
+}
+function hookTipps(cid, games, removed) {
+  const c = root.competitions.find((x) => x.id === cid);
+  if (!c) return;
+  if (removed && removed.length) c.tippArchive = c.tippArchive.filter((g) => !removed.includes(g.day));
+  for (const g of games) archiveGame(c, g);
+  saveLocal();
+  if (c === state && ui.tab === "stats") renderStats();
 }
 function hookGroup(g) {
   root.admin = g.admin;
@@ -3049,7 +3194,7 @@ if (GROUP) {
     }, 12000);
   }
   SYNC.start(GROUP, root, {
-    onRemote: hookRemote, onRemoved: hookRemoved, onRounds: hookRounds, onGroup: hookGroup,
+    onRemote: hookRemote, onRemoved: hookRemoved, onRounds: hookRounds, onGroup: hookGroup, onTipps: hookTipps,
     onStatus: hookStatus, onReady: hookReady, onGroupMissing: hookGroupMissing
   });
   let invite = false;

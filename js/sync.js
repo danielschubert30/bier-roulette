@@ -12,6 +12,7 @@
 // geändert, werden beide Stände zusammengeführt (merge3). Haben beide gleichzeitig gedreht oder geschossen,
 // gilt das schnellere Handy; das andere übernimmt dessen Stand. Ohne Netz wird gesammelt und nachgetragen.
 import { normComp, normRound, uid } from "./store.js";
+import { normGame } from "./tipp.js";
 
 export const FIREBASE = {
   apiKey: "AIzaSyC6M9S6qMBprXS8dsWQchHmWwISS4X6_vc",
@@ -181,6 +182,11 @@ function mergeEach(b, l, r, win) {
   }
   return out;
 }
+// Zwei Fassungen desselben Tippspiels vereinen (Archiv): alle Tipps und Ergebnisse bleiben
+export function unionGame(a, b) {
+  if (!isObj(a) || a.day !== (isObj(b) && b.day)) return isObj(b) ? b : a;
+  return mergeTipp(null, a, b, { conflict: false, paths: [] });
+}
 // Zusammenstoß (z. B. zwei Drehs gleichzeitig): Der fremde Stand gilt, die eigenen Tipps kommen trotzdem mit
 export function keepTips(base, local, remote) {
   if (!isObj(remote) || !isObj(local)) return { value: remote, kept: false };
@@ -228,7 +234,7 @@ function entry(cid) {
       rev: m.rev || 0, base: typeof m.base === "string" ? m.base : null,
       rounds: new Set(m.rounds || []), days: new Set(m.days || []),
       running: null, again: false, quiet: true, silent: false, stash: null, timer: 0, roundsUnsub: null,
-      seq: 0, pendingS: null, pendingAt: 0, baseP: null, baseO: null
+      seq: 0, pendingS: null, pendingAt: 0, baseP: null, baseO: null, tippsUnsub: null
     };
     E.set(cid, e);
   }
@@ -374,6 +380,7 @@ function listen() {
 function dropComp(cid) {
   const e = E.get(cid);
   if (e && e.roundsUnsub) e.roundsUnsub();
+  if (e && e.tippsUnsub) e.tippsUnsub();
   E.delete(cid);
   hooks.onRemoved(cid);
 }
@@ -382,6 +389,7 @@ function onCompDoc(cid, d) {
   if (!d || typeof d.s !== "string") return;
   const e = entry(cid);
   ensureRounds(cid);
+  ensureTipps(cid);
   if ((d.rev || 0) <= e.rev) return;
   if (myWids.has(d.wid)) { e.rev = d.rev; return; }   // eigene Änderung kommt zurück
   if (e.running) { if (!e.stash || d.rev > e.stash.rev) e.stash = d; return; }
@@ -420,6 +428,26 @@ function dropUnsentRounds(cid, e) {
   if (comp) comp.rounds = comp.rounds.filter((r) => e.rounds.has(r.id));
 }
 
+// Frühere Tippspiele (für die Tippkönig-Tabelle): alle Handys sehen dasselbe Archiv
+function ensureTipps(cid) {
+  const e = entry(cid);
+  if (e.tippsUnsub || !fb) return;
+  e.tippsUnsub = fb.fs.onSnapshot(fb.fs.collection(fb.db, "groups", code, "comps", cid, "tipps"), (snap) => {
+    const fromCache = !!(snap.metadata && snap.metadata.fromCache);
+    if (fromCache && !snap.docs.length) return;
+    const games = snap.docs.map((x) => x.data())
+      .map((d) => { try { return d && typeof d.g === "string" ? normGame(JSON.parse(d.g)) : null; } catch (err) { return null; } })
+      .filter(Boolean);
+    games.forEach((g) => { g.seen = {}; });
+    // Früher bestätigt und jetzt weg: auf einem anderen Handy zurückgesetzt
+    const days = new Set(games.map((g) => g.day));
+    const removed = fromCache ? [] : [...e.days].filter((d) => !days.has(d));
+    if (fromCache) days.forEach((d) => e.days.add(d));
+    else e.days = days;
+    saveMeta();
+    if ((games.length || removed.length) && hooks.onTipps) hooks.onTipps(cid, games, removed);
+  }, onErr);
+}
 function ensureRounds(cid) {
   const e = entry(cid);
   if (e.roundsUnsub || !fb) return;
@@ -503,6 +531,9 @@ async function doFlush(cid) {
   const { fs } = fb;
   try {
     const res = await fs.runTransaction(fb.db, async (tx) => {
+      const tipRef = (day) => ref("groups", code, "comps", cid, "tipps", day);
+      const oldDays = [];
+      for (const g of newDays) oldDays.push(await tx.get(tipRef(g.day)));
       const snap = await tx.get(compRef(cid));
       const d = snap.exists() ? snap.data() : null;
       const rRev = d ? d.rev || 0 : 0;
@@ -520,7 +551,12 @@ async function doFlush(cid) {
       tx.set(compRef(cid), { rev: rRev + 1, wid, by: DEVICE, at: Date.now(), name: comp.name, fca: !!comp.fca, createdAt: comp.createdAt || 0, s: payload });
       const now = Date.now();
       newRounds.forEach((r, i) => tx.set(ref("groups", code, "comps", cid, "rounds", r.id), { ord: now + i, r: JSON.stringify(r) }));
-      newDays.forEach((g) => tx.set(ref("groups", code, "comps", cid, "tipps", g.day), { day: g.day, g: JSON.stringify({ ...g, seen: {} }) }));
+      newDays.forEach((g, i) => {
+        let game = { ...g, seen: {} };
+        const od = oldDays[i] && oldDays[i].exists() ? oldDays[i].data() : null;
+        if (od && typeof od.g === "string") { try { game = unionGame(normGame(JSON.parse(od.g)) || game, game); game.seen = {}; } catch (err) { /* defekt: überschreiben */ } }
+        tx.set(tipRef(g.day), { day: g.day, g: JSON.stringify(game) });
+      });
       return { rev: rRev + 1, payload, merged };
     });
     e.rev = res.rev;
@@ -662,6 +698,7 @@ export function removeComp(cid) {
   b.delete(compRef(cid));
   b.commit().catch(onErr);
   if (e.roundsUnsub) e.roundsUnsub();
+  if (e.tippsUnsub) e.tippsUnsub();
   E.delete(cid);
   saveMeta();
 }

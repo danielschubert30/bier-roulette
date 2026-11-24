@@ -1,15 +1,16 @@
 // Tippspiel: drei feste Fragen vor dem Anpfiff, entschieden möglichst früh im Spiel.
-// Jede richtige Antwort macht das eigene Feld auf dem Rad ein Viertel kleiner, jede falsche ein Viertel größer.
+// Jede richtige Antwort macht das eigene Feld auf dem Rad ein Fünftel (20 %) kleiner, jede falsche ein Fünftel größer
+// (bis 1.6.0 ein Viertel; nach dem ersten Einsatz mit Daniel auf 20 % abgeschwächt, 24.11.2026).
 // Gilt für den ganzen Abend (bis 6 Uhr früh). Aufgelöst wird automatisch über OpenLigaDB
 // (kostenlos, ohne Schlüssel, von Freiwilligen gepflegt, Tore mit Minute, Halbzeitstand) oder per Knopf.
 // Dieses Modul enthält nur Regeln und Datenauswertung, keine Oberfläche.
 
-export const STEP = 0.25;               // Feldänderung pro Frage
-export const MIN_W = 0.25;              // kleinstes Feld (nie ganz weg)
+export const STEP = 0.2;                // Feldänderung pro Frage
+export const MIN_W = 0.2;               // kleinstes Feld (nie ganz weg)
 export const LOCK_GRACE = 3 * 60000;    // getippt werden darf bis 3 Minuten nach Anpfiff
 export const HALF_AFTER = 60;           // Halbzeit-Frage frühestens 60 Minuten nach Anpfiff auswerten
 export const API = "https://api.openligadb.de";
-export const LEAGUES = ["bl1", "bl2"];  // hier wird das heutige FCA-Spiel gesucht
+export const LEAGUES = ["bl1", "bl2", "dfb"];  // hier wird das heutige FCA-Spiel gesucht (dfb = DFB-Pokal, falls OpenLigaDB es führt)
 const FCA_ID = 95;                      // FC Augsburg in OpenLigaDB
 
 export const QUESTIONS = [
@@ -41,7 +42,8 @@ export function newGame(day) {
     results: {},         // Frage -> { v, at, src: "live" | "manual" }
     liveSays: {},        // Frage -> was die Live-Daten zuletzt meldeten (für Hinweise bei Abweichung)
     locked: null,        // Zeitpunkt, ab dem nicht mehr getippt werden darf
-    seen: {}             // Frage -> Auflösung, die schon angezeigt wurde
+    patron: {},          // Ausgeschiedener -> Pate (beim Anpfiff zugelost, siehe patronsFor)
+    seen: {}             // Frage -> Auflösung, die schon angezeigt wurde (patron: angezeigte Paten)
   };
 }
 
@@ -66,9 +68,62 @@ export function scoreOf(g, pid) {
   return out;
 }
 
+// Richtige Antworten der Ausgeschiedenen, deren Pate dieser Spieler ist
+export function helpOf(g, pid) {
+  let n = 0;
+  if (g && g.patron) for (const t of Object.keys(g.patron)) if (g.patron[t] === pid) n += scoreOf(g, t).right;
+  return n;
+}
+
 export function weightOf(g, pid) {
   const s = scoreOf(g, pid);
-  return Math.max(MIN_W, 1 + STEP * (s.wrong - s.right));
+  return Math.round(Math.max(MIN_W, 1 + STEP * (s.wrong - s.right - helpOf(g, pid))) * 100) / 100;
+}
+
+/* ---------- Paten für Ausgeschiedene (abgestimmt mit Daniel, 24.11.2026) ---------- */
+// Wer beim Anpfiff in der laufenden Runde schon gezogen war, bekommt einen Paten, der noch im Rad ist.
+// Jede richtige Antwort macht das Feld des Paten ein Fünftel kleiner; falsche zählen für den Paten nicht.
+// Zugelost wird nach festen Regeln aus Tag und Runde: Jedes Handy kommt auf dasselbe Ergebnis.
+
+// Zeitpunkt, ab dem die Tipps zu waren
+export function lockTime(g) {
+  if (!g) return null;
+  const c = [g.locked, g.match && g.match.kickoff ? g.match.kickoff + LOCK_GRACE : null];
+  for (const q of QUESTIONS) if (g.results[q.id]) c.push(g.results[q.id].at);
+  const ok = c.filter((x) => typeof x === "number" && x > 0);
+  return ok.length ? Math.min(...ok) : null;
+}
+function hash(s) {
+  let x = 2166136261;
+  for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619); }
+  return x >>> 0;
+}
+// Paten nachlosen (bestehende bleiben). round = laufende Runde, lockAt = lockTime(g).
+export function patronsFor(g, round, lockAt) {
+  const have = (g && g.patron) || {};
+  if (!g || !round || !lockAt || (round.startedAt || 0) > lockAt || !Array.isArray(round.pot) || !Array.isArray(round.picks)) return have;
+  const out = new Set(round.picks.filter((k) => k && k.at <= lockAt).map((k) => k.id));
+  const cands = round.pot.filter((p) => p && !out.has(p.id));
+  // Steht nur noch das Finale an, sind gleich wieder alle in einer neuen Runde: dann kein Pate
+  if (cands.filter((p) => !p.guest).length <= 2 && !cands.some((p) => p.guest)) return have;
+  const ids = cands.map((p) => p.id).sort();
+  const todo = Object.keys(g.tips).filter((t) => out.has(t) && !(t in have) && (g.tips[t].at || 0) <= lockAt);
+  if (!ids.length || !todo.length) return have;
+  const seed = g.day + "|" + round.id + "|";
+  const load = new Map(ids.map((id) => [id, 0]));
+  for (const t of Object.keys(have)) if (load.has(have[t])) load.set(have[t], load.get(have[t]) + 1);
+  const res = { ...have };
+  todo.sort((a, b) => hash(seed + a) - hash(seed + b) || (a < b ? -1 : 1));
+  for (const t of todo) {
+    const min = Math.min(...load.values());
+    const pick = ids.filter((id) => load.get(id) === min).sort((a, b) => hash(seed + t + "|" + a) - hash(seed + t + "|" + b) || (a < b ? -1 : 1))[0];
+    res[t] = pick;
+    load.set(pick, min + 1);
+  }
+  return res;
+}
+export function patronSig(g) {
+  return g && g.patron ? Object.keys(g.patron).sort().map((t) => t + ">" + g.patron[t]).join(",") : "";
 }
 
 /* ---------- Speichern: Daten prüfen ---------- */
@@ -105,6 +160,10 @@ export function normGame(raw) {
     if (VALUES[q.id].includes(s)) g.seen[q.id] = s;
   }
   g.locked = pos(raw.locked);
+  if (raw.patron && typeof raw.patron === "object") {
+    for (const t of Object.keys(raw.patron)) if (ID.test(t) && ID.test(String(raw.patron[t]))) g.patron[t] = String(raw.patron[t]);
+  }
+  if (raw.seen && typeof raw.seen.patron === "string") g.seen.patron = raw.seen.patron.slice(0, 2000);
   return g;
 }
 

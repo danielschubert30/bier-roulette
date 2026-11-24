@@ -1,7 +1,7 @@
 // Zusammenführen zweier Handy-Stände (merge3 und keepTips in js/sync.js). Start im Projektordner: node tests/abgleich.mjs
 globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 globalThis.location = { href: "http://x/" };
-const { merge3, keepTips, stable } = await import("../js/sync.js");
+const { merge3, keepTips, unionGame, stable } = await import("../js/sync.js");
 let fails = 0;
 const t = (name, got, want) => { const ok = stable(got) === stable(want); if (!ok) fails++; console.log((ok ? "ok   " : "FAIL ") + name + (ok ? "" : "\n  got  " + stable(got) + "\n  want " + stable(want))); };
 const P = (id, name) => ({ id, name, color: "#c8102e", active: true, guest: false });
@@ -53,4 +53,9 @@ const k = keepTips(base, l, r);
 t("Zusammenstoß: fremder Dreh gilt, beide Tipps bleiben", [m.conflict, k.kept, k.value.round.picks.map((x) => x.id), Object.keys(k.value.tipp.tips).sort()], [true, true, ["p2"], ["p2", "p4"]]);
 l = clone(base); l.round.picks.push({ id: "p1" });
 t("Zusammenstoß ohne eigenen Tipp: nichts zu retten", keepTips(base, l, r).kept, false);
+// Archiv: zwei Fassungen desselben Abends vereinen
+const ga = game("2026-11-22", { p1: tip("fca", 1), p2: tip("opp", 2) }, { first: { v: "fca", at: 5, src: "live" } });
+const gb = game("2026-11-22", { p2: tip("opp", 2), p3: tip("fca", 3) }, { first: { v: "fca", at: 6, src: "live" }, half: { v: "yes", at: 9, src: "manual" } });
+const u = unionGame(ga, gb);
+t("Archiv vereint: alle Tipps und Ergebnisse", [Object.keys(u.tips).sort(), Object.keys(u.results).sort()], [["p1", "p2", "p3"], ["first", "half"]]);
 console.log(fails ? `${fails} FEHLER` : "Alle Prüfungen bestanden");

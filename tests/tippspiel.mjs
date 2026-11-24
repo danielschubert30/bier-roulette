@@ -1,5 +1,5 @@
 // Regeln des Tippspiels (js/tipp.js). Start im Projektordner: node tests/tippspiel.mjs
-import { readMatch, evaluate, pickMatch, applyLive, newGame, weightOf, scoreOf, normGame, isLocked } from "../js/tipp.js";
+import { readMatch, evaluate, pickMatch, applyLive, newGame, weightOf, scoreOf, normGame, isLocked, patronsFor, lockTime, helpOf } from "../js/tipp.js";
 const KO = Date.parse("2026-11-14T14:30:00Z"), MIN = 60000;
 let fails = 0;
 const eq = (name, got, want) => { const ok = JSON.stringify(got) === JSON.stringify(want); if (!ok) fails++; console.log((ok ? "ok   " : "FAIL ") + name + (ok ? "" : `  got ${JSON.stringify(got)} want ${JSON.stringify(want)}`)); };
@@ -58,9 +58,9 @@ const g = newGame("2026-11-14");
 g.tips = { a: { first: "fca", early: "yes", half: "yes" }, b: { first: "opp", early: "no", half: "no" }, c: { first: "fca", early: "no", half: "yes" } };
 let ch = applyLive(g, { first: "fca", early: null, half: null }, KO + 20 * MIN);
 eq("Live: Frage 1 übernommen", [ch, g.results.first.v, !!g.locked], [["first"], "fca", true]);
-eq("Gewichte nach Frage 1", ["a", "b", "c", "d"].map((p) => weightOf(g, p)), [0.75, 1.25, 0.75, 1]);
+eq("Gewichte nach Frage 1", ["a", "b", "c", "d"].map((p) => weightOf(g, p)), [0.8, 1.2, 0.8, 1]);
 applyLive(g, { first: "fca", early: "yes", half: "yes" }, KO + 60 * MIN);
-eq("Gewichte nach allen drei", ["a", "b", "c"].map((p) => weightOf(g, p)), [0.25, 1.75, 0.75]);
+eq("Gewichte nach allen drei", ["a", "b", "c"].map((p) => weightOf(g, p)), [0.4, 1.6, 0.8]);
 eq("Zeichen für b", scoreOf(g, "b").marks, ["wrong", "wrong", "wrong"]);
 g.results.half = { v: "no", at: 1, src: "manual" };
 ch = applyLive(g, { first: "fca", early: "yes", half: "yes" }, KO + 61 * MIN);
@@ -72,4 +72,36 @@ eq("Zählt nicht: kein Einfluss", weightOf(g, "a"), 1 + 0.25 * (0 - 1) + 0.25 * 
 const back = normGame(JSON.parse(JSON.stringify(g)));
 eq("Speichern und Laden", [Object.keys(back.tips).length, back.results.half.src, back.liveSays.half], [3, "manual", "yes"]);
 eq("Sperre: 2 Min nach Anpfiff noch offen, nach 3 zu", [isLocked({ ...newGame("x"), match: { kickoff: KO } }, KO + 2 * MIN), isLocked({ ...newGame("x"), match: { kickoff: KO } }, KO + 3 * MIN)], [false, true]);
+
+// Paten für Ausgeschiedene (1.7.0)
+{
+  const P = (id, guest = false) => ({ id, name: id, color: "#c8102e", active: !guest, guest });
+  const T = (first, at) => ({ first, early: "yes", half: "yes", at, name: "x", color: "#c8102e" });
+  const lock = KO + 3 * MIN;
+  const round = { id: "r9", startedAt: KO - 300 * MIN, pot: ["a", "b", "c", "d", "e", "f", "g"].map((x) => P(x)), final: null,
+    picks: [{ id: "a", at: KO - 200 * MIN }, { id: "b", at: KO - 100 * MIN }, { id: "c", at: KO + 30 * MIN }] };
+  const g = newGame("2026-11-29");
+  g.match = { id: 1, kickoff: KO };
+  g.tips = { a: T("fca", KO - 50 * MIN), b: T("opp", KO - 40 * MIN), c: T("fca", KO - 30 * MIN), d: T("fca", KO - 20 * MIN) };
+  eq("Sperrzeit = Anpfiff + 3 Min", lockTime(g), lock);
+  const p1 = patronsFor(g, round, lock);
+  eq("Nur wer beim Anpfiff schon raus war, bekommt einen Paten", Object.keys(p1).sort(), ["a", "b"]);
+  eq("Pate ist noch im Rad und nicht doppelt", [["c", "d", "e", "f", "g"].includes(p1.a), ["c", "d", "e", "f", "g"].includes(p1.b), p1.a !== p1.b], [true, true, true]);
+  eq("Jedes Handy lost dasselbe", patronsFor(g, JSON.parse(JSON.stringify(round)), lock), p1);
+  g.patron = p1;
+  g.tips.x = T("fca", KO - 10 * MIN);   // spät angekommener Tipp (ohne Netz abgegeben)
+  round.pot.push(P("x")); round.picks.push({ id: "x", at: KO - 90 * MIN });
+  const p2 = patronsFor(g, round, lock);
+  eq("Nachzügler bekommt einen Paten, die anderen bleiben", [p2.a, p2.b, !!p2.x, p2.x !== p2.a && p2.x !== p2.b], [p1.a, p1.b, true, true]);
+  g.patron = p2;
+  g.results = { first: { v: "fca", at: lock + 10 * MIN, src: "live" }, early: { v: "no", at: lock + 30 * MIN, src: "live" } };
+  const pa = p2.a;
+  eq("Pate von a: eine richtige Antwort von a hilft", [helpOf(g, pa), weightOf(g, pa)], [1, (g.tips[pa] ? weightOf({ ...g, patron: {} }, pa) : 1) - 0.2]);
+  eq("Falsche Antworten (b) zählen für den Paten nicht", helpOf(g, p2.b), 0);
+  eq("Neue Runde nach dem Anpfiff: keine Paten", patronsFor({ ...g, patron: {} }, { ...round, startedAt: lock + MIN }, lock), {});
+  const fin = { id: "r8", startedAt: KO - 300 * MIN, pot: ["a", "b", "c", "d"].map((x) => P(x)), picks: [{ id: "a", at: KO - 9 * MIN }, { id: "b", at: KO - 8 * MIN }], final: null };
+  eq("Nur noch Finale offen: keine Paten", patronsFor({ ...g, patron: {} }, fin, lock), {});
+  const back = normGame(JSON.parse(JSON.stringify({ ...g, seen: { patron: "a>d" } })));
+  eq("Paten speichern und laden", [back.patron, back.seen.patron], [p2, "a>d"]);
+}
 console.log(fails ? `\n${fails} FEHLER` : "\nAlle Prüfungen bestanden");

@@ -58,7 +58,7 @@ Gespeichert wird ein Objekt `{version: 2, activeId, competitions, settings, admi
 - Biertempo: `beerLog` (alle wirklich geholten Biere mit Zeit) und `gapsOf` (Abstände am selben Abend) speisen Ticker, Ergebnis und Statistik.
 - `beers` = Anzahl Anwesender (Mitspieler) im Moment des Holens. Daraus rechnet die Statistik den Bier-Saldo pro Saison (Juli–Juni): geholte Biere minus Saisonschnitt × Anzahl.
 - `lastDone`: zuletzt entschiedenes Finale (damit andere Handys den letzten Schuss und den Champion sehen, auch bei nachgeholten Finals).
-- `tipp`: Tippspiel des Abends `{day, match, tips, results, liveSays, locked, seen}`, `tippArchive`: frühere mit Tipps (max. 60). Regeln und Prüfung in `js/tipp.js` (`normGame`, `weightOf`, `evaluate`, `applyLive`). Feldgröße pro Spieler: 1 ± 0,25 je Frage, mindestens 0,25. Ergebnisse haben `src: live|manual`; Live-Daten überschreiben nie von Hand Eingetragenes.
+- `tipp`: Tippspiel des Abends `{day, match, tips, results, liveSays, locked, patron, seen}`, `tippArchive`: frühere mit Tipps (max. 60). Regeln und Prüfung in `js/tipp.js` (`normGame`, `weightOf`, `evaluate`, `applyLive`). Feldgröße pro Spieler: 1 ± 0,2 je Frage (`STEP`, bis 1.6.0 0,25), mindestens 0,2 (`MIN_W`); Paten-Hilfe zieht zusätzlich 0,2 je richtiger Antwort des Patenkinds ab (`helpOf`). `patron`: Ausgeschiedener → Pate. Ergebnisse haben `src: live|manual`; Live-Daten überschreiben nie von Hand Eingetragenes.
 - Kader-Änderungen wirken sofort: neue Stammspieler kommen in den `pot` der laufenden Runde (`joinRound`), ausgeschaltete oder gelöschte verlassen ihn ohne Schuld (`leaveRound`, gesperrt für Finalisten und die letzten zwei: `leaveBlocker`). Im Finale gelten Neue erst ab der nächsten Runde.
 
 ### Spielregeln bei Fehlenden und Gästen
@@ -76,6 +76,9 @@ Gespeichert wird ein Objekt `{version: 2, activeId, competitions, settings, admi
 - Auflösungen erscheinen als eigenes Fenster (`revealSheet`); das Rad wächst/schrumpft erst nach dem Schließen (`ui.revealing` hält `syncWheel` an).
 - Halbzeit-Frage frühestens `HALF_AFTER` = 60 Minuten nach Anpfiff und nur, wenn der Halbzeitstand zu den Toren bis zur 45. passt. Grund: Am 22.11.2026 stand bei OpenLigaDB bis zum Pausenpfiff ein Platzhalter (0:0 statt 2:0), die App zeigte kurz das Gegenteil.
 - Tippen dürfen alle eingeschalteten Stammspieler, auch wer fehlt (`tipPeople`), dazu anwesende Gäste.
+- Paten (`patronsFor` in `js/tipp.js`, aufgerufen über `ensurePatrons` in `renderGame`): ab Sperrzeit (`lockTime`) für jeden Tipper, der in der laufenden Runde vor der Sperrzeit gezogen wurde. Kandidaten = Topf ohne die vor der Sperrzeit Gezogenen; kein Pate, wenn nur noch das Finale offen ist oder die Runde nach der Sperrzeit begann. Feste Auslosung aus Tag + Runde (Hash), gleichmäßig verteilt; bestehende Paten bleiben, Nachzügler werden ergänzt. Fenster einmal pro Handy (`seen.patron`).
+- Tippkönig (`computeTippKing`): `tippArchive` + heutiges Spiel, Zeitraum wie die Statistik oben. Archiv kommt vom Server (`ensureTipps` in `js/sync.js` → `hookTipps`), beim Hochladen wird mit dem Server-Stand vereint (`unionGame`). Kommt von einem anderen Handy ein neuerer Abend, wird das alte Spiel vorher archiviert (`assignShared`).
+- Spiel-Suche: `LEAGUES` = 1. Liga, 2. Liga, DFB-Pokal (`dfb`; ob OpenLigaDB ihn führt, ist ungeprüft, Fehler dort werden ignoriert). Heim/Auswärts egal (`fcaFirst`).
 
 ## Lokal testen
 
@@ -100,4 +103,4 @@ Dann `http://localhost:8080` öffnen und in den Entwicklertools die Handy-Ansich
 - Fremde Änderungen: `hookRemote` → Warteschlange (`ui.remoteQ`, nie während einer Animation) → `applyRemote` erkennt neuen Dreh/Schuss/Champion (`remoteEvents`) und spielt ihn nach (`remoteSpin` mit `ui.hidePick`, `remoteShot`).
 - Admin-PIN liegt in `groups/{code}.admin` und gilt für alle Handys der Gruppe. Prüfung nur in der App (Schutz vor Versehen, nicht vor Technikern).
 - iPhone: Die App auf dem Home-Bildschirm hat einen eigenen Speicher. Wer sie dort ohne Gruppe öffnet, wird nach dem Link gefragt (sonst Kader → Gemeinsam spielen).
-- Testen: `tests/zwei_handys.py` und `tests/tipps.py` mit nachgebauter Firebase, Regeln ohne Browser mit `node tests/tippspiel.mjs`, `node tests/abgleich.mjs`, `node tests/rad.mjs`. Die echte Datenbank ist aus der Claude-Umgebung nicht erreichbar; ein Kurztest gegen Firebase geht über Daniels Chrome auf der GitHub-Pages-Seite. Warten in Playwright-Tests immer mit `page.wait_for_timeout`, nicht `time.sleep` (sonst antwortet die Test-Datenbank nicht).
+- Testen: `tests/zwei_handys.py`, `tests/tipps.py` und `tests/paten.py` mit nachgebauter Firebase, Regeln ohne Browser mit `node tests/tippspiel.mjs`, `node tests/abgleich.mjs`, `node tests/rad.mjs`. Die echte Datenbank ist aus der Claude-Umgebung nicht erreichbar; ein Kurztest gegen Firebase geht über Daniels Chrome auf der GitHub-Pages-Seite. Warten in Playwright-Tests immer mit `page.wait_for_timeout`, nicht `time.sleep` (sonst antwortet die Test-Datenbank nicht).
