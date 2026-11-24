@@ -8,6 +8,7 @@
 export const STEP = 0.2;                // Feldänderung pro Frage
 export const MIN_W = 0.2;               // kleinstes Feld (nie ganz weg)
 export const LOCK_GRACE = 3 * 60000;    // getippt werden darf bis 3 Minuten nach Anpfiff
+export const JOKER_EVERY = 5;           // je 5 Tippspiele einer Saison ein Joker für den Besten
 export const HALF_AFTER = 60;           // Halbzeit-Frage frühestens 60 Minuten nach Anpfiff auswerten
 export const API = "https://api.openligadb.de";
 export const LEAGUES = ["bl1", "bl2", "dfb"];  // hier wird das heutige FCA-Spiel gesucht (dfb = DFB-Pokal, falls OpenLigaDB es führt)
@@ -122,6 +123,52 @@ export function patronsFor(g, round, lockAt) {
   }
   return res;
 }
+/* ---------- Joker für den Tippkönig (abgestimmt mit Daniel, 24.11.2026) ---------- */
+// Gezählt werden Tippspiele mit Tipps und mindestens einer entschiedenen Frage, die vorbei sind (früherer Abend)
+// oder bei denen alle drei Fragen entschieden sind.
+// Je Saison (Juli bis Juni) bilden je 5 solche Spiele einen Block. Wer im Block die meisten richtigen Antworten hat
+// (mindestens eine), bekommt einen Joker; bei Gleichstand alle Besten. Die Kennung ist fest, so vergibt jedes Handy dieselben.
+export const seasonOfDay = (day) => { const [y, m] = String(day).split("-").map(Number); return m >= 7 ? y : y - 1; };
+export function countedGames(games, today) {
+  return games.filter((g) => g && g.day && Object.keys(g.tips || {}).length && QUESTIONS.some((q) => g.results[q.id])
+    && (g.day < today || QUESTIONS.every((q) => g.results[q.id])))
+    .sort((a, b) => (a.day < b.day ? -1 : 1));
+}
+export function jokerAwards(games, today) {
+  const bySeason = new Map();
+  for (const g of countedGames(games, today)) {
+    const s = seasonOfDay(g.day);
+    if (!bySeason.has(s)) bySeason.set(s, []);
+    bySeason.get(s).push(g);
+  }
+  const out = [];
+  for (const [season, list] of bySeason) {
+    for (let b = 0; (b + 1) * JOKER_EVERY <= list.length; b++) {
+      const block = list.slice(b * JOKER_EVERY, (b + 1) * JOKER_EVERY);
+      const right = new Map(), who = new Map();
+      for (const g of block) for (const pid of Object.keys(g.tips)) {
+        right.set(pid, (right.get(pid) || 0) + scoreOf(g, pid).right);
+        who.set(pid, g.tips[pid]);
+      }
+      const top = Math.max(0, ...right.values());
+      if (top < 1) continue;
+      for (const [pid, n] of right) {
+        if (n !== top) continue;
+        const t = who.get(pid);
+        out.push({ id: `j${season}-${b + 1}-${pid}`.slice(0, 48), playerId: pid, name: t.name, color: t.color, season, block: b + 1, right: n,
+          days: block.map((g) => g.day) });
+      }
+    }
+  }
+  return out;
+}
+// Wie weit ist der laufende Block der Saison? { done, need }
+export function jokerProgress(games, today) {
+  const s = seasonOfDay(today);
+  const n = countedGames(games, today).filter((g) => seasonOfDay(g.day) === s).length;
+  return { done: n % JOKER_EVERY, need: JOKER_EVERY };
+}
+
 export function patronSig(g) {
   return g && g.patron ? Object.keys(g.patron).sort().map((t) => t + ">" + g.patron[t]).join(",") : "";
 }

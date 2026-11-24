@@ -30,6 +30,7 @@ Wer holt das nächste Bier? Das Glücksrad für unsere FCA-Runde im Stadion.
 - Jede richtige Antwort macht dein Feld auf dem Rad 20 % kleiner, jede falsche 20 % größer. Kleineres Feld heißt: seltener Bier holen. Gilt den ganzen Abend.
 - Wer in der Runde schon raus ist, bekommt beim Anpfiff einen Paten zugelost, der noch im Rad ist. Jede richtige Antwort macht das Feld des Paten 20 % kleiner.
 - Unter Statistik steht der Tippkönig: richtige Antworten und Trefferquote für heute, die Saison oder insgesamt.
+- Joker: Nach je 5 Tippspielen bekommt der Beste einen Joker (Kartensymbol am Namen). Wird er gezogen, kann er ihn im Ergebnisfenster einsetzen: Das Rad dreht neu, er bleibt drin. Gilt bis Saisonende.
 - Klappt bei Heim- und Auswärtsspielen. Pokalspiele löst die App selbst auf, wenn der Live-Ticker sie führt, sonst per Knopf.
 - Die App holt die Ergebnisse selbst aus dem Live-Ticker, mit ein paar Minuten Verzögerung (die Halbzeit-Frage erst eine Stunde nach Anpfiff, wegen Nachspielzeit). Schneller geht es, wenn einer im Stadion das Ergebnis im Tippspiel antippt.
 - Bei jeder Auflösung zeigt die App, wer richtig lag. An den Namen stehen drei Punkte: grün richtig, rot daneben, leer noch offen.
@@ -47,6 +48,12 @@ Wer holt das nächste Bier? Das Glücksrad für unsere FCA-Runde im Stadion.
 - Am iPhone mit der App auf dem Home-Bildschirm: Startet sie ohne gemeinsame Runde, fragt sie nach dem Einladungslink. Einfach aus WhatsApp kopieren und einfügen. Wer die App neu hinzufügt, sollte vorher den Einladungslink öffnen, dann ist die Runde gleich dabei.
 - Der Punkt oben neben dem Namen zeigt die Verbindung: grün aktuell, gelb wird hochgeladen, rot offline. Ohne Netz wird weitergespielt und später nachgetragen.
 - „Verlassen“ holt den eigenen Stand dieses Handys zurück.
+
+## Rückgängig
+
+- Der runde Pfeil oben neben „x/7 da“ nimmt die letzte Ziehung zurück, auch wenn schon jemand auf „Weiter“ getippt hat. Mehrmals tippen geht mehrere Ziehungen zurück.
+- Mit Admin-PIN reicht eine Eingabe, danach ist es eine Minute frei.
+- Geht nur in der laufenden Runde und nicht mehr, sobald im Elfmeterschießen der erste Schuss gefallen ist.
 
 ## Für die Weiterentwicklung
 

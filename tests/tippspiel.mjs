@@ -1,5 +1,5 @@
 // Regeln des Tippspiels (js/tipp.js). Start im Projektordner: node tests/tippspiel.mjs
-import { readMatch, evaluate, pickMatch, applyLive, newGame, weightOf, scoreOf, normGame, isLocked, patronsFor, lockTime, helpOf } from "../js/tipp.js";
+import { readMatch, evaluate, pickMatch, applyLive, newGame, weightOf, scoreOf, normGame, isLocked, patronsFor, lockTime, helpOf, jokerAwards, jokerProgress, countedGames } from "../js/tipp.js";
 const KO = Date.parse("2026-11-14T14:30:00Z"), MIN = 60000;
 let fails = 0;
 const eq = (name, got, want) => { const ok = JSON.stringify(got) === JSON.stringify(want); if (!ok) fails++; console.log((ok ? "ok   " : "FAIL ") + name + (ok ? "" : `  got ${JSON.stringify(got)} want ${JSON.stringify(want)}`)); };
@@ -103,5 +103,30 @@ eq("Sperre: 2 Min nach Anpfiff noch offen, nach 3 zu", [isLocked({ ...newGame("x
   eq("Nur noch Finale offen: keine Paten", patronsFor({ ...g, patron: {} }, fin, lock), {});
   const back = normGame(JSON.parse(JSON.stringify({ ...g, seen: { patron: "a>d" } })));
   eq("Paten speichern und laden", [back.patron, back.seen.patron], [p2, "a>d"]);
+}
+
+// Joker für den Tippkönig (1.8.0)
+{
+  const res = (a, b, c) => ({ first: { v: a, at: 1, src: "live" }, early: { v: b, at: 1, src: "live" }, half: { v: c, at: 1, src: "live" } });
+  const tp = (first, early, half) => ({ first, early, half, at: 1, name: "x", color: "#c8102e" });
+  const game = (day, tips, results) => ({ ...newGame(day), tips, results });
+  const all = { s: tp("fca", "yes", "yes"), b: tp("fca", "no", "no"), c: tp("opp", "no", "no") };
+  const days = ["2026-08-01", "2026-08-15", "2026-08-29", "2026-09-12", "2026-09-26", "2026-10-10", "2026-10-24"];
+  const gs = days.map((d) => game(d, all, res("fca", "yes", "yes")));
+  gs.push(game("2026-07-05", all, {}));   // ohne Ergebnis: zählt nicht
+  const aw = jokerAwards(gs, "2026-11-01");
+  eq("Nach 5 Spielen ein Joker für den Besten", aw.map((a) => [a.playerId, a.block, a.right]), [["s", 1, 15]]);
+  eq("Fortschritt: Spiel 2 von 5 im nächsten Block", jokerProgress(gs, "2026-11-01"), { done: 2, need: 5 });
+  eq("Spiel ohne Ergebnis zählt nicht", countedGames(gs, "2026-11-01").length, 7);
+  const tie = days.slice(0, 5).map((d, i) => game(d, { s: tp("fca", "yes", "no"), b: tp("fca", "no", "yes"), c: tp("opp", "no", "no") }, res("fca", "yes", "yes")));
+  eq("Gleichstand: beide bekommen einen Joker", jokerAwards(tie, "2026-11-01").map((a) => a.playerId).sort(), ["b", "s"]);
+  const today = game("2026-11-01", all, { first: { v: "fca", at: 1, src: "live" } });
+  const four = gs.slice(0, 4).concat(today);
+  eq("Heutiges Spiel zählt erst, wenn alle drei Fragen entschieden sind", jokerAwards(four, "2026-11-01").length, 0);
+  today.results = res("fca", "yes", "yes");
+  eq("…dann gibt es den Joker noch am selben Abend", jokerAwards(four, "2026-11-01").length, 1);
+  const split = ["2026-05-01", "2026-05-15", "2026-06-01", "2026-07-15", "2026-08-01"].map((d) => game(d, all, res("fca", "yes", "yes")));
+  eq("Neue Saison ab Juli: Blöcke beginnen neu", jokerAwards(split, "2026-11-01").length, 0);
+  eq("Kennung ist fest (gleich auf jedem Handy)", jokerAwards(gs, "2026-11-01")[0].id, "j2026-1-s");
 }
 console.log(fails ? `\n${fails} FEHLER` : "\nAlle Prüfungen bestanden");

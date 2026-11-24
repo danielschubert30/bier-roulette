@@ -261,6 +261,21 @@ button { touch-action: manipulation; }
 .sheet-undo { height: 56px; padding: 0 16px; border-radius: 14px; border: 1.5px solid var(--on-color); background: transparent; font-weight: 600; cursor: pointer; }
 .sheet-next { height: 56px; border-radius: 14px; border: 0; background: var(--on-color); color: var(--night); font-family: var(--font-display); font-weight: 900; font-size: 24px; letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer; }
 
+/* Joker im Ergebnisfenster */
+.sheet-joker {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; margin: 0 0 10px; padding: 8px 14px;
+  border-radius: 14px; border: 2px solid var(--gold); background: rgba(0, 0, 0, 0.32); color: var(--on-color); cursor: pointer; text-align: left;
+}
+.sheet-joker .ico { width: 26px; height: 26px; color: var(--gold); }
+.sj-main { display: flex; flex-direction: column; font-family: var(--font-display); font-weight: 900; font-size: 22px; letter-spacing: 0.03em; text-transform: uppercase; line-height: 1.05; }
+.sj-main small { font-family: var(--font-body); font-weight: 500; font-size: 13px; letter-spacing: 0; text-transform: none; opacity: 0.85; margin-top: 2px; }
+.chip-joker { width: 14px; height: 14px; color: var(--gold); flex: none; }
+.rv-joker { width: 26px; height: 26px; color: var(--gold); justify-self: start; }
+.joker-box .kicker { margin-top: 14px; }
+.joker-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.joker-list li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 15px; }
+.joker-list li span:last-child { color: var(--chalk-3); font-size: 13px; }
+
 /* Leiste unten */
 .tabbar {
   display: grid; grid-template-columns: repeat(3, 1fr);

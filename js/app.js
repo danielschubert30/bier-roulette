@@ -6,7 +6,7 @@ import * as TP from "./tipp.js";
 import * as SO from "./shootout.js";
 import { SPIN_QUIPS, RESULT_QUIPS, FINAL_INTROS, CHAMPION_QUIPS, SHOT_TEXT, FCA_FACTS, TEMPO_QUIPS } from "./content.js";
 
-const APP_VERSION = "1.7.0";
+const APP_VERSION = "1.8.0";
 const NS = "http://www.w3.org/2000/svg";
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const $ = (id) => document.getElementById(id);
@@ -26,7 +26,8 @@ const els = {
   presenceCancel: $("presenceCancel"), presenceOk: $("presenceOk"), guestForm: $("guestForm"), guestInput: $("guestInput"),
   guestRoster: $("guestRoster"), roleReg: $("roleReg"), roleGuest: $("roleGuest"),
   champCard: $("champCard"), rangeToday: $("rangeToday"), rangeSeason: $("rangeSeason"), rangeAll: $("rangeAll"),
-  kpis: $("kpis"), table: $("table"), tippKingBox: $("tippKingBox"), tippKing: $("tippKing"), seasonSeg: $("seasonSeg"), seasonMeta: $("seasonMeta"), saldo: $("saldo"), debts: $("debts"), honors: $("honors"),
+  kpis: $("kpis"), table: $("table"), tippKingBox: $("tippKingBox"), tippKing: $("tippKing"), jokerBox: $("jokerBox"),
+  sheetJoker: $("sheetJoker"), sheetJokerNote: $("sheetJokerNote"), seasonSeg: $("seasonSeg"), seasonMeta: $("seasonMeta"), saldo: $("saldo"), debts: $("debts"), honors: $("honors"),
   squadNote: $("squadNote"), roster: $("roster"), addForm: $("addForm"), nameInput: $("nameInput"), addBtn: $("addBtn"),
   roundTools: $("roundTools"), abortBtn: $("abortBtn"), soundToggle: $("soundToggle"), vibeToggle: $("vibeToggle"),
   resetBtn: $("resetBtn"), version: $("version"), toast: $("toast"),
@@ -659,6 +660,10 @@ function openSheet(p, absent, remote) {
     els.sheetQuip.textContent = quip;
     els.sheetNext.textContent = lastTwo ? "Weiter zum Finale" : "Weiter";
   }
+  const last = state.round && state.round.picks[state.round.picks.length - 1];
+  const jk = absent || !last || last.id !== p.id ? [] : jokersOf(p.id);
+  els.sheetJoker.hidden = !jk.length;
+  if (jk.length) els.sheetJokerNote.textContent = `Rad dreht neu, ${p.name} bleibt drin` + (jk.length > 1 ? ` · noch ${jk.length}` : "");
   els.sheet.hidden = false;
   els.sheetBackdrop.hidden = false;
   fitText(els.sheetName, 84, 34);
@@ -927,6 +932,13 @@ function chip(p, cls, no, tag) {
   li.style.setProperty("--c", p.color);
   if (no) li.append(h("span", "chip-no", `${no}.`));
   li.append(h("span", "dot"), h("span", null, p.name));
+  if (!no && jokersOf(p.id).length) {
+    const jk = icon("i-joker", "chip-joker");
+    jk.setAttribute("aria-label", "hat einen Joker");
+    jk.setAttribute("role", "img");
+    jk.removeAttribute("aria-hidden");
+    li.append(jk);
+  }
   if (tag) li.append(h("span", "chip-tag", tag));
   if (!no) {
     const tm = tipMarks(p.id);
@@ -1133,6 +1145,7 @@ function renderChampion() {
 function renderGame(animate) {
   ensureTipGame();
   ensurePatrons();
+  ensureJokers();
   syncRoundMembers();
   let mode = viewMode();
   if (mode === "spin" && finalDue(state.round) && !ui.sheetFor && !ui.spinning && !ui.remoteBusy) {
@@ -1398,10 +1411,34 @@ function computeTippKing() {
   const quote = (r) => (r.right + r.wrong ? r.right / (r.right + r.wrong) : -1);
   return { games: games.length, rows: [...rows.values()].sort((a, b) => b.right - a.right || quote(b) - quote(a) || a.name.localeCompare(b.name, "de")) };
 }
+function renderJokers() {
+  const box = els.jokerBox;
+  box.replaceChildren();
+  if (!state.fca) return;
+  const pr = TP.jokerProgress(tipGames(), todayKey());
+  box.append(h("h3", "kicker", "Joker"));
+  const open = (state.jokers || []).filter((j) => !j.usedAt && j.season === curSeason());
+  const used = (state.jokers || []).filter((j) => j.usedAt && j.season === curSeason());
+  if (open.length) {
+    const ul = h("ul", "joker-list");
+    for (const j of open) {
+      const li = h("li");
+      li.style.setProperty("--c", j.color);
+      li.append(icon("i-joker", "chip-joker"), h("span", "dot"), h("b", null, j.name), h("span", null, ` Spiele ${(j.block - 1) * TP.JOKER_EVERY + 1} bis ${j.block * TP.JOKER_EVERY}, ${j.right} richtig`));
+      ul.append(li);
+    }
+    box.append(ul);
+  }
+  const usedTxt = used.length ? ` Eingesetzt: ${used.map((j) => j.name).join(", ")}.` : "";
+  const left = pr.need - pr.done;
+  box.append(h("p", "caption", `Nach je ${pr.need} Tippspielen bekommt der Beste einen Joker. Bis zum nächsten: noch ${left} ${left === 1 ? "Tippspiel" : "Tippspiele"}.${usedTxt}`
+    + (open.length ? "" : " Gerade hat niemand einen.")));
+}
 function renderTippKing() {
   const any = state.fca || tipGames().some((g) => Object.keys(g.tips).length);
   els.tippKingBox.hidden = !any;
   if (!any) return;
+  renderJokers();
   els.tippKing.replaceChildren();
   const { games, rows } = computeTippKing();
   const decided = rows.reduce((n, r) => n + r.right + r.wrong, 0);
@@ -2081,6 +2118,55 @@ function personOf(id) {
   const p = state.players.find((x) => x.id === id) || (state.round && state.round.pot.find((x) => x.id === id));
   return p || { id, name: "?", color: PALETTE[0] };
 }
+/* Joker für den Tippkönig: je 5 Tippspiele einer Saison (Regeln in js/tipp.js, jokerAwards) */
+const curSeason = () => TP.seasonOfDay(todayKey());
+const jokersOf = (pid) => (state.jokers || []).filter((j) => j.playerId === pid && !j.usedAt && j.season === curSeason());
+function ensureJokers() {
+  if (!state.fca) return;
+  if (!state.jokers) state.jokers = [];
+  const have = new Set(state.jokers.map((j) => j.id));
+  const add = TP.jokerAwards(tipGames(), todayKey()).filter((a) => !have.has(a.id));
+  if (!add.length) return;
+  for (const a of add) {
+    const p = state.players.find((x) => x.id === a.playerId);
+    state.jokers.push({ id: a.id, playerId: a.playerId, name: p ? p.name : a.name, color: p ? p.color : a.color,
+      season: a.season, block: a.block, right: a.right, wonAt: Date.now(), usedAt: null, roundId: null });
+  }
+  persist(true);
+}
+// Joker-Fenster einmal pro Handy
+const JOKER_SEEN = "fca-bier-roulette:jokers-seen";
+function jokersSeen() { try { return new Set(JSON.parse(localStorage.getItem(JOKER_SEEN) || "[]")); } catch (e) { return new Set(); } }
+function markJokersSeen(ids) {
+  const s = jokersSeen();
+  ids.forEach((x) => s.add(x));
+  try { localStorage.setItem(JOKER_SEEN, JSON.stringify([...s].slice(-200))); } catch (e) { /* egal */ }
+}
+function newJokers() {
+  const seen = jokersSeen();
+  return (state.jokers || []).filter((j) => !j.usedAt && j.season === curSeason() && !seen.has(j.id) && Date.now() - j.wonAt < 4 * 864e5);
+}
+// Gezogener setzt seinen Joker ein: Ziehung zurück, er bleibt im Topf, das Rad dreht für dieses Bier neu
+function useJoker() {
+  const r = state.round;
+  const k = r && r.picks[r.picks.length - 1];
+  const pid = ui.sheetFor;
+  const j = pid && jokersOf(pid)[0];
+  if (!k || k.id !== pid || k.absent || !j || ui.spinning || ui.remoteBusy) { toast("Der Joker geht hier nicht mehr."); return; }
+  if (r.final) { r.final = null; ui.finalLine = null; }
+  r.picks.pop();
+  j.usedAt = Date.now();
+  j.roundId = r.id;
+  persist();
+  const name = infoOf(pid, r).name;
+  closeSheet();
+  wheel.highlight(null);
+  sting();
+  buzz([30, 40, 30, 40, 90]);
+  toast(`Joker! ${name} bleibt im Topf. Das Rad dreht neu.`);
+  renderAll(true);
+  setTimeout(() => { if (viewMode() === "spin" && !busyNow() && !ui.remoteBusy) spin(); }, 1300);
+}
 // In der laufenden Runde schon gezogen (für den Hinweis beim Tippen)
 const outOfRound = (id) => !!state.round && !state.round.final && state.round.picks.some((k) => k.id === id);
 function weightFor(id) {
@@ -2445,8 +2531,9 @@ const revealBlocked = () => ui.spinning || ui.shooting || !!ui.sheetFor || !els.
   !els.presenceSheet.hidden || !els.compSheet.hidden || !els.pinSheet.hidden || (!els.tippSheet.hidden && !!ui.tipFor);
 function maybeReveal() {
   const g = tipGame();
-  if (!g) { ui.reveals = []; return; }
+  if (!g) { ui.reveals = []; }
   if (revealBlocked()) return;
+  if (!g) { const nj = newJokers(); if (nj.length) openJokerReveal(nj); return; }
   const sig = TP.patronSig(g);
   if (sig && g.seen.patron !== sig) { openPatronReveal(g, sig); return; }
   // auch Auflösungen, die noch nie gezeigt wurden (z. B. weil die App zu war)
@@ -2461,6 +2548,38 @@ function maybeReveal() {
     openReveal(g, qid);
     return;
   }
+  const nj = newJokers();
+  if (nj.length) openJokerReveal(nj);
+}
+function openJokerReveal(list) {
+  markJokersSeen(list.map((j) => j.id));
+  ui.revealing = { qid: "joker" };
+  const names = list.map((j) => j.name);
+  const j0 = list[0];
+  const from = (j0.block - 1) * TP.JOKER_EVERY + 1;
+  els.revealLabel.textContent = "Tippkönig · Joker";
+  els.revealTitle.textContent = `Joker für ${names.length > 1 ? names.slice(0, -1).join(", ") + " und " + names[names.length - 1] : names[0]}`;
+  els.revealSrc.textContent = `${list.length > 1 ? "Gleichauf vorn" : "Bester Tipper"} der Spiele ${from} bis ${from + TP.JOKER_EVERY - 1} dieser Saison, ${j0.right} richtige Antworten`;
+  const body = els.revealBody;
+  body.replaceChildren();
+  const ul = h("ul", "rv-list rv-pairs");
+  for (const j of list) {
+    const li = h("li");
+    const x = h("span", "rv-who");
+    x.style.setProperty("--c", j.color);
+    x.append(h("span", "dot"), h("span", "rv-name", j.name));
+    li.append(x, h("span", "rv-arrow", "Joker"), icon("i-joker", "rv-joker"));
+    ul.append(li);
+  }
+  body.append(ul, h("p", "caption", "Wird er gezogen, fragt die App: Joker einsetzen? Dann dreht das Rad für dieses Bier neu und er bleibt im Topf. Man kann ihn auch aufheben. Gilt bis zum Saisonende."));
+  const acts = els.revealActions;
+  acts.replaceChildren();
+  acts.className = "sheet-actions sheet-actions-single";
+  acts.append(btn("sheet-next", ui.tab === "game" ? "Zum Rad" : "Weiter", closeReveal));
+  els.revealSheet.hidden = false;
+  els.sheetBackdrop.hidden = false;
+  els.revealSheet.scrollTop = 0;
+  champFanfare();
 }
 function revealGroup(title, people, cls, iconId, delta) {
   const box = h("div", "rv-group " + cls);
@@ -2669,7 +2788,10 @@ function remoteEvents(old, neu) {
   // Neuer Dreh: in derselben Runde eine Ziehung mehr, oder eine neue Runde mit der ersten Ziehung
   if (nr && (!nr.final || (!nr.final.shots.length && !nr.final.winner)) && nr.picks.length) {
     const prev = or && or.id === nr.id ? (or.final ? -1 : or.picks.length) : 0;
-    if (nr.picks.length === prev + 1) ev.pick = nr.picks[nr.picks.length - 1];
+    const last = nr.picks[nr.picks.length - 1];
+    const oldLast = or && or.id === nr.id && or.picks.length ? or.picks[or.picks.length - 1] : null;
+    if (nr.picks.length === prev + 1) ev.pick = last;
+    else if (oldLast && !or.final && nr.picks.length === or.picks.length && oldLast.at !== last.at) ev.pick = last;   // Joker und gleich neu gedreht
   }
   // Neuer Schuss: im laufenden oder nachgeholten Finale ein Schuss mehr (auch der erste, wenn das Finale gerade erst begann)
   const finals = (st) => [st.round, ...(st.pending || [])].filter((r) => r && r.final);
@@ -2741,6 +2863,12 @@ async function applyRemote({ c, shared, info }) {
     return;
   }
   const ev = remoteEvents({ round: state.round, pending: state.pending }, shared);
+  // Joker auf einem anderen Handy eingesetzt
+  const usedNow = (shared.jokers || []).filter((j) => j.usedAt && (state.jokers || []).some((o) => o.id === j.id && !o.usedAt));
+  if (usedNow.length) {
+    if (ui.sheetFor && usedNow.some((j) => j.playerId === ui.sheetFor)) { closeSheet(); wheel.highlight(null); }
+    toast(`Joker! ${usedNow[0].name} bleibt im Topf. Das Rad dreht neu.`);
+  }
   const watching = ui.tab === "game" && document.visibilityState === "visible" && !otherSheetOpen();
   if (ev.pick && watching) {
     await remoteSpin(ev.pick, shared);
@@ -3072,6 +3200,7 @@ els.presenceBtn.addEventListener("click", () => openPresence(null));
 els.presenceOk.addEventListener("click", () => closePresence(true));
 els.presenceCancel.addEventListener("click", () => closePresence(false));
 els.sheetNext.addEventListener("click", sheetNext);
+els.sheetJoker.addEventListener("click", useJoker);
 els.sheetUndo.addEventListener("click", () => requireAdmin("Rückgängig", undoLast));
 function closeTopSheet() {
   if (!els.pinSheet.hidden) closePin();
@@ -3216,5 +3345,21 @@ if (document.fonts && document.fonts.ready) {
 }
 
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  const hadSw = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.register("sw.js").catch(() => {});
+  // Neue Fassung ist da: einmal neu laden, sobald gerade nichts läuft. Sonst sieht ein Handy sie erst beim übernächsten Öffnen,
+  // und alte und neue Fassung spielen länger nebeneinander.
+  let reloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadSw || reloading) return;
+    const go = () => {
+      const busy = busyNow() || ui.remoteBusy || ui.remoteQ.length || ui.tipFor || ui.creating
+        || [els.pinSheet, els.groupSheet, els.presenceSheet, els.compSheet, els.revealSheet, els.tippSheet].some((x) => !x.hidden)
+        || (document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName));
+      if (busy) { setTimeout(go, 3000); return; }
+      reloading = true;
+      location.reload();
+    };
+    go();
+  });
 }

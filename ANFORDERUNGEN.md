@@ -61,6 +61,7 @@ Legende: `[x]` umgesetzt · `[ ]` offen
 - [x] **D7 Gleichzeitig und Funkloch:** Drehen zwei gleichzeitig, zählt der Schnellere; der andere bekommt „Ein anderes Handy hat gerade gedreht“ und sieht dessen Dreh. Ohne Netz wird weitergespielt und nachgetragen. War inzwischen ein anderes Handy schneller, gilt dessen Stand (mit Meldung). Tipps, Anwesenheit und Kader-Änderungen von mehreren Handys laufen zusammen.
 - [x] **D8 Admin-PIN für die ganze Gruppe:** Die PIN gilt auf allen Handys der Gruppe (bleibt ein Schutz vor Versehen und Schabernack, kein Tresor).
 - [x] **D9 Verbindungsanzeige:** Punkt neben dem Namen oben links: grün aktuell, gelb wird hochgeladen, rot offline.
+- [x] **D11 Updates sofort:** Ist eine neue Fassung da, lädt die App einmal neu, sobald gerade nichts läuft (1.8.0). Schließt man die App mitten im Nachdrehen eines fremden Drehs, geht nach dem Neustart nichts verloren.
 - [x] **D10 Verlassen:** „Verlassen“ holt den eigenen Stand dieses Handys zurück; Beitreten auch per eingefügtem Link (z. B. für die App auf dem iPhone-Home-Bildschirm).
 
 ## E – Statistik
@@ -86,7 +87,8 @@ Legende: `[x]` umgesetzt · `[ ]` offen
 - [x] **F9 Home-Bildschirm-App findet die Runde:** Die Adresse enthält jetzt immer den Einladungslink, so nimmt „Zum Home-Bildschirm“ die Runde mit. Startet die App vom Home-Bildschirm ohne Runde (eigener Speicher am iPhone), fragt sie einmal nach dem Link.
 - [x] **F10 Pate für Ausgeschiedene** (entschieden 24.11.2026): Wer beim Anpfiff in der laufenden Runde schon gezogen war und getippt hat, bekommt einen Paten zugelost, der noch im Rad ist (gleichmäßig verteilt, auf allen Handys gleich). Jede richtige Antwort macht das Feld des Paten 20 % kleiner; falsche zählen für den Paten nicht (kein Sabotieren). Kein Pate, wenn nur noch das Finale offen ist. Fenster „Pate zugelost“, Hinweis in der Auflösung („Pate Schaufi: auch −20 %“) und in der Tipp-Tabelle. Die eigenen Tipps wirken wie bisher aufs eigene Feld (wichtig, wenn am selben Abend eine neue Runde beginnt).
 - [x] **F11 Tippkönig** (entschieden 24.11.2026): Tabelle in der Statistik mit richtigen Antworten, Spielen und Trefferquote, Zeitraum wie oben (Heute, Saison, Gesamt). Frühere Tippspiele liegen auf dem Server, damit alle Handys dieselbe Tabelle sehen.
-- [ ] **F12 Preis für den Tippkönig:** Idee von Daniel (24.11.2026), z. B. alle 5 Spieltage ein Joker. Entscheidung offen.
+- [x] **F12 Joker für den Tippkönig** (entschieden 24.11.2026): Je 5 Tippspiele einer Saison (gezählt werden Spiele mit mindestens einer entschiedenen Frage; das heutige, sobald alle drei entschieden sind) bekommt der Beste einen Joker, bei Gleichstand alle Besten. Wird er gezogen, fragt das Ergebnisfenster „Joker einsetzen“: Die Ziehung wird zurückgenommen, er bleibt im Topf und das Rad dreht für dieses Bier neu. Er kann ihn auch aufheben; verfällt am Saisonende. Nicht bei Bierschuld (Fehlende). Joker-Zeichen am Namen, Fenster „Joker für …“, Stand unter Statistik → Tippkönig.
+- [x] **F13 Rückgängig:** Der runde Pfeil oben nimmt die letzte Ziehung zurück, auch nach „Weiter“, mehrmals hintereinander möglich (mit Admin-PIN eine Minute frei). Nur in der laufenden Runde und bis zum ersten Elfmeter. (Bestätigt 24.11.2026, war schon so.)
 
 ## Ideen-Speicher (noch nicht beauftragt)
 

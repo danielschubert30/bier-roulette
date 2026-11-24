@@ -29,6 +29,7 @@
   <symbol id="i-ball" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M12 7.6l4.2 3-1.6 4.9H9.4l-1.6-4.9z" fill="currentColor"/><path d="M12 7.6V3M16.2 10.6l4.3-1.4M14.6 15.5l2.7 3.7M9.4 15.5l-2.7 3.7M7.8 10.6 3.5 9.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.6 4.6L19.2 7.4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-cross" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></symbol>
+  <symbol id="i-joker" viewBox="0 0 24 24"><rect x="5" y="2.5" width="14" height="19" rx="2.6" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 7.2l1.35 2.75 3.03.44-2.19 2.13.52 3.02L12 14.12l-2.71 1.42.52-3.02-2.19-2.13 3.03-.44z" fill="currentColor"/></symbol>
   <symbol id="i-wait" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M12 7.4V12l3.2 2.2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-team" viewBox="0 0 24 24"><circle cx="8.5" cy="8" r="3.4" fill="currentColor"/><path d="M2 20c0-3.6 2.9-6.2 6.5-6.2S15 16.4 15 20z" fill="currentColor"/><circle cx="17" cy="9" r="2.8" fill="currentColor" opacity=".7"/><path d="M15.6 14.2c3.5-.6 6.4 1.8 6.4 5.8h-5.3" fill="currentColor" opacity=".7"/></symbol>
 </svg>
@@ -124,6 +125,7 @@
       <div id="tippKingBox" hidden>
         <h2 class="section-title">Tippkönig</h2>
         <div id="tippKing"></div>
+        <div class="joker-box" id="jokerBox"></div>
       </div>
 
       <div class="section-head">
@@ -217,6 +219,10 @@
   <h2 class="sheet-name" id="sheetName"></h2>
   <p class="sheet-meta" id="sheetMeta"></p>
   <p class="sheet-quip" id="sheetQuip"></p>
+  <button type="button" class="sheet-joker" id="sheetJoker" hidden>
+    <svg class="ico" aria-hidden="true"><use href="#i-joker"/></svg>
+    <span class="sj-main">Joker einsetzen<small id="sheetJokerNote"></small></span>
+  </button>
   <div class="sheet-actions">
     <button type="button" class="sheet-undo" id="sheetUndo">Rückgängig</button>
     <button type="button" class="sheet-next" id="sheetNext">Weiter</button>

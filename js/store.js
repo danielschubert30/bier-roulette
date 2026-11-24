@@ -62,6 +62,7 @@ export function newCompetition(name, fca, players) {
     debts: [],            // Bierschulden von Fehlenden
     presence: null,       // { day: "JJJJ-MM-TT", ids: [...] } – wer an diesem Abend da ist
     tipp: null,           // Tippspiel des Abends (siehe js/tipp.js)
+    jokers: [],           // Joker für den Tippkönig je 5 Spiele (siehe js/tipp.js, jokerAwards)
     tippArchive: [],      // frühere Tippspiele mit Tipps (für eine spätere Statistik)
     lastDone: null        // zuletzt entschiedenes Finale (damit andere Handys es live mitsehen)
   };
@@ -116,6 +117,15 @@ export function normRound(r) {
   return { id: String(r.id), startedAt: Number(r.startedAt) || Date.now(), pot, picks, final };
 }
 
+function normJoker(j) {
+  if (!j || !ID.test(String(j.id || "")) || !ID.test(String(j.playerId || ""))) return null;
+  const n = (v) => (isFinite(v) && v > 0 ? Number(v) : null);
+  return {
+    id: String(j.id), playerId: String(j.playerId), name: cleanName(j.name) || "?", color: HEX.test(j.color) ? j.color : "#455a64",
+    season: n(j.season) || 0, block: Math.max(0, Math.floor(Number(j.block) || 0)), right: Math.max(0, Math.floor(Number(j.right) || 0)),
+    wonAt: n(j.wonAt) || 0, usedAt: n(j.usedAt), roundId: ID.test(String(j.roundId || "")) ? String(j.roundId) : null
+  };
+}
 function posInt(v) {
   const n = Math.round(Number(v));
   return isFinite(n) && n > 0 && n < 100 ? n : null;
@@ -153,6 +163,8 @@ export function normComp(raw, fallbackName, fallbackFca) {
     c.presence = { day: raw.presence.day, ids: raw.presence.ids.filter((id) => ID.test(String(id))).map(String) };
   }
   c.tipp = normGame(raw.tipp);
+  const jseen = new Set();
+  c.jokers = (Array.isArray(raw.jokers) ? raw.jokers : []).map(normJoker).filter((j) => j && !jseen.has(j.id) && jseen.add(j.id)).slice(-100);
   c.tippArchive = (Array.isArray(raw.tippArchive) ? raw.tippArchive : []).map(normGame).filter(Boolean).slice(-60);
   const done = normRound(raw.lastDone);
   c.lastDone = done && done.final && done.final.winner ? done : null;

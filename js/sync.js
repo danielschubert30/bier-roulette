@@ -92,7 +92,7 @@ const DEVICE = (() => {
 
 /* ---------- Was geteilt wird ---------- */
 // Alles außer fertigen Runden, Tipp-Archiv und dem, was nur dieses Handy betrifft (z. B. gesehene Tipp-Auflösungen)
-export const SHARED = ["name", "fca", "createdAt", "players", "round", "pending", "debts", "presence", "tipp", "lastDone"];
+export const SHARED = ["name", "fca", "createdAt", "players", "round", "pending", "debts", "presence", "tipp", "lastDone", "jokers"];
 export function sharedOf(comp) {
   const o = {};
   for (const k of SHARED) o[k] = comp[k] === undefined ? null : comp[k];
@@ -118,7 +118,7 @@ const CRIT = new Set(["round", "round.id", "round.picks", "round.final", "pendin
 // Diese Stellen werden als Ganzes verglichen, nicht Feld für Feld
 const ATOMIC = new Set(["round.picks", "round.final", "pending", "presence", "lastDone"]);
 // Listen mit eindeutiger id: Einträge werden einzeln zusammengeführt
-const BYID = new Set(["players", "debts", "round.pot"]);
+const BYID = new Set(["players", "debts", "round.pot", "jokers"]);
 
 export function merge3(base, local, remote) {
   const st = { conflict: false, paths: [] };
@@ -234,7 +234,8 @@ function entry(cid) {
       rev: m.rev || 0, base: typeof m.base === "string" ? m.base : null,
       rounds: new Set(m.rounds || []), days: new Set(m.days || []),
       running: null, again: false, quiet: true, silent: false, stash: null, timer: 0, roundsUnsub: null,
-      seq: 0, pendingS: null, pendingAt: 0, baseP: null, baseO: null, tippsUnsub: null
+      seq: 0, pendingS: null, pendingAt: 0, baseP: null, baseO: null, tippsUnsub: null,
+      okRev: m.rev || 0, okBase: typeof m.base === "string" ? m.base : null   // zuletzt mit dem App-Stand übereinstimmend
     };
     E.set(cid, e);
   }
@@ -251,6 +252,11 @@ function deliver(cid, value, info) {
   hooks.onRemote(cid, value, { ...info, seq: e.seq });
 }
 const localOf = (e, comp) => (e.pendingS != null ? e.pendingS : sj(comp));
+function settle(e) {
+  if (e.pendingS != null) return;
+  e.okRev = e.rev;
+  e.okBase = e.base;
+}
 function loadMeta(c) {
   try { return JSON.parse(lsGet(META_KEY + c) || "{}") || {}; } catch (e) { return {}; }
 }
@@ -258,7 +264,9 @@ function saveMeta() {
   clearTimeout(metaTimer);
   metaTimer = setTimeout(() => {
     const m = {};
-    for (const [cid, e] of E) if (e.rev) m[cid] = { rev: e.rev, base: e.base, rounds: [...e.rounds], days: [...e.days] };
+    // Gespeichert wird der Ausgangsstand, der zum gespeicherten App-Stand passt. Ein fremder Stand, den die App noch nicht
+    // übernommen hat (Animation läuft), zählt noch nicht: Wird die App jetzt geschlossen, wird nach dem Neustart sauber zusammengeführt.
+    for (const [cid, e] of E) if (e.okRev) m[cid] = { rev: e.okRev, base: e.okBase, rounds: [...e.rounds], days: [...e.days] };
     lsSet(META_KEY + code, JSON.stringify(m));
   }, 200);
 }
@@ -391,7 +399,7 @@ function onCompDoc(cid, d) {
   ensureRounds(cid);
   ensureTipps(cid);
   if ((d.rev || 0) <= e.rev) return;
-  if (myWids.has(d.wid)) { e.rev = d.rev; return; }   // eigene Änderung kommt zurück
+  if (myWids.has(d.wid)) { e.rev = d.rev; settle(e); return; }   // eigene Änderung kommt zurück
   if (e.running) { if (!e.stash || d.rev > e.stash.rev) e.stash = d; return; }
   takeRemote(cid, d);
 }
@@ -514,11 +522,9 @@ async function doFlush(cid) {
   const e = entry(cid);
   const comp = findComp(cid);
   if (!comp || comp._ph) return "clean";
-  // Ein fremder Stand ist unterwegs zur App (sie spielt gerade etwas ab): erst danach hochladen
-  if (e.pendingS != null) {
-    if (Date.now() - e.pendingAt < 20000) return "wait";
-    e.pendingS = null;
-  }
+  // Ein fremder Stand ist unterwegs zur App (sie spielt gerade etwas ab, evtl. pausiert im Hintergrund): erst danach hochladen.
+  // Nie vorher, sonst würde der veraltete Stand im Speicher die Änderungen der anderen überschreiben.
+  if (e.pendingS != null) return "wait";
   const localS = sj(comp);
   const newRounds = comp.rounds.filter((r) => !e.rounds.has(r.id));
   const newDays = (comp.tippArchive || []).filter((g) => !e.days.has(g.day));
@@ -561,6 +567,7 @@ async function doFlush(cid) {
     });
     e.rev = res.rev;
     e.base = res.payload;
+    if (!res.merged) settle(e);
     newRounds.forEach((r) => e.rounds.add(r.id));
     newDays.forEach((g) => e.days.add(g.day));
     if (res.merged) {
@@ -600,7 +607,10 @@ export const isActive = () => started;
 // Die App hat den mit onRemote übergebenen Stand übernommen (Nummer aus info.seq)
 export function applied(cid, seq) {
   const e = E.get(cid);
-  if (e && seq >= e.seq) e.pendingS = null;
+  if (!e || seq < e.seq) return;
+  e.pendingS = null;
+  settle(e);
+  saveMeta();
 }
 
 // Ist der Tipp dieses Spielers schon beim Server angekommen? null = kein Tipp oder keine Gruppe

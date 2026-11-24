@@ -174,6 +174,23 @@ with sync_playwright() as p:
     C.reload(); C.wait_for_timeout(800)
     check("Zweiter Start: kein Verbinden-Fenster mehr", not vis(C, "#groupSheet"))
 
+    # 8) App wird mitten im Nachdrehen eines fremden Drehs geschlossen: nach dem Neustart geht nichts verloren
+    for pg in (A, B):
+        if vis(pg, "#sheet"): pg.click("#sheetNext"); pg.wait_for_timeout(300)
+        if vis(pg, "#tippSheet"): close_tipp(pg)
+    picks0 = len(server_state(code)["round"]["picks"])
+    B.click("#cta"); B.wait_for_timeout(300)
+    if vis(B, "#presenceSheet"): B.click("#presenceOk"); B.wait_for_timeout(300)
+    B.wait_for_selector("#sheet:not([hidden])", timeout=10000)
+    b_pick = server_state(code)["round"]["picks"][-1]["id"]
+    A.wait_for_timeout(1500)            # A dreht gerade nach (echte Animation)
+    A.reload(); A.wait_for_timeout(8000)
+    if vis(A, "#sheet"): A.click("#sheetNext"); A.wait_for_timeout(300)
+    do_tip(A, "Schaufi"); close_tipp(A); A.wait_for_timeout(1500)
+    s = server_state(code)
+    check("Neustart mitten im Nachdrehen: fremder Dreh bleibt, eigener Tipp kommt dazu",
+          len(s["round"]["picks"]) == picks0 + 1 and s["round"]["picks"][-1]["id"] == b_pick and "p5" in server_tips(code), f"{len(s['round']['picks'])} Ziehungen, Tipps {server_tips(code)}")
+
     print("Seitenfehler:", [e for e in errors if "Service Worker" not in e][:10])
     print("Bilder:", OUT + "/t-*.png")
     b.close()
